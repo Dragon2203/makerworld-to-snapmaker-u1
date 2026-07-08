@@ -1,0 +1,52 @@
+﻿[
+    {
+        "id":  "0.08mm-extra-fine",
+        "display":  "0.08mm Extra Fine",
+        "file":  "profiles/0.08mm-extra-fine.json"
+    },
+    {
+        "id":  "0.08mm-high-quality",
+        "display":  "0.08mm High Quality",
+        "file":  "profiles/0.08mm-high-quality.json"
+    },
+    {
+        "id":  "0.12mm-fine",
+        "display":  "0.12mm Fine",
+        "file":  "profiles/0.12mm-fine.json"
+    },
+    {
+        "id":  "0.12mm-high-quality",
+        "display":  "0.12mm High Quality",
+        "file":  "profiles/0.12mm-high-quality.json"
+    },
+    {
+        "id":  "0.16mm-high-quality",
+        "display":  "0.16mm High Quality",
+        "file":  "profiles/0.16mm-high-quality.json"
+    },
+    {
+        "id":  "0.16mm-optimal",
+        "display":  "0.16mm Optimal",
+        "file":  "profiles/0.16mm-optimal.json"
+    },
+    {
+        "id":  "0.20mm-standard",
+        "display":  "0.20mm Standard",
+        "file":  "profiles/0.20mm-standard.json"
+    },
+    {
+        "id":  "0.20mm-strength",
+        "display":  "0.20mm Strength",
+        "file":  "profiles/0.20mm-strength.json"
+    },
+    {
+        "id":  "0.24mm-draft",
+        "display":  "0.24mm Draft",
+        "file":  "profiles/0.24mm-draft.json"
+    },
+    {
+        "id":  "0.28mm-extra-draft",
+        "display":  "0.28mm Extra Draft",
+        "file":  "profiles/0.28mm-extra-draft.json"
+    }
+]

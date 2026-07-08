@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MakerWorld to Snapmaker U1 — Settings</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, sans-serif;
+    font-size: 14px;
+    background: #1a1a1a;
+    color: #e0e0e0;
+    padding: 32px;
+    max-width: 980px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 18px; font-weight: 600; margin-bottom: 24px; color: #fff; }
+  h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #888; margin-bottom: 12px; }
+  section { background: #252525; border-radius: 8px; padding: 18px 20px; margin-bottom: 16px; }
+  label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; }
+  label span { color: #ccc; }
+  input[type=text], select, textarea {
+    background: #333; border: 1px solid #444; color: #e0e0e0; border-radius: 5px;
+    padding: 6px 10px; font-size: 13px; font-family: inherit; width: 100%;
+  }
+  input[type=text]:focus, select:focus, textarea:focus { outline: none; border-color: #4a9eff; }
+  textarea { resize: vertical; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; }
+  input[type=checkbox] { width: 15px; height: 15px; accent-color: #4a9eff; cursor: pointer; }
+  button {
+    padding: 6px 14px; border-radius: 5px; border: none; cursor: pointer;
+    font-size: 13px; font-family: inherit;
+  }
+  .btn-primary { background: #4a9eff; color: #fff; }
+  .btn-primary:hover { background: #3a8ef0; }
+  .btn-danger  { background: #c0392b; color: #fff; }
+  .btn-danger:hover  { background: #a93226; }
+  .btn-ghost   { background: #333; color: #ccc; border: 1px solid #444; }
+  .btn-ghost:hover  { background: #3a3a3a; }
+  .save-row { margin-top: 8px; display: flex; align-items: center; gap: 12px; }
+  #saveStatus { font-size: 12px; color: #4caf50; }
+  .hint { margin-top: 8px; color: #888; font-size: 12px; line-height: 1.5; }
+  #profilesLoading { color: #888; font-size: 13px; } 
+
+  .option-row {
+    background: #2b2b2b;
+    border: 1px solid #383838;
+    border-radius: 7px;
+    padding: 12px 14px;
+    margin-top: 10px;
+  }
+
+  .option-row label {
+    margin-bottom: 0;
+  }
+
+  .option-row .hint {
+    margin-top: 6px;
+    margin-left: 23px;
+  }
+
+  .profile-info {
+    margin-top: 10px;
+    background: #202020;
+    border: 1px solid #353535;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 12px;
+    color: #ccc;
+    line-height: 1.6;
+  }
+
+  .profile-info-row {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 8px;
+  }
+
+  .profile-info-row strong {
+    color: #888;
+    font-weight: 500;
+  }
+
+  .path-code {
+    display: block;
+    margin: 6px 0;
+    background: #1f1f1f;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-family: Consolas, "Courier New", monospace;
+    color: #e8e8e8;
+    width: fit-content;
+  }
+
+</style>
+</head>
+<body>
+<h1>MakerWorld to Snapmaker U1 Settings</h1>
+
+<section>
+  <h2>Custom U1 Printer Profile</h2>
+
+  <div class="option-row">
+    <label>
+      <span style="min-width:160px">Printer profile</span>
+      <select id="customPrinterProfileId">
+        <option value="__standard_u1_printer_profile__">Standard U1 profile</option>
+      </select>
+    </label>
+    <p class="hint">Optional custom Snapmaker Orca printer profile. Imported profiles are stored locally in this browser.</p>
+    <div class="profile-info" id="customPrinterProfileInfo" style="display:none"></div>
+  </div>
+
+  <div class="option-row">
+    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center">
+      <button type="button" class="btn-ghost" id="importCustomPrinterProfileBtn">Import custom printer profile JSON</button>
+      <button type="button" class="btn-danger" id="deleteCustomPrinterProfileBtn">Delete selected custom profile</button>
+      <input type="file" id="customPrinterProfileFiles" accept=".json,application/json" multiple style="display:none">
+    </div>
+    <p class="hint" id="customPrinterProfileHint">
+      Import the printer profile JSON exported from <strong>Snapmaker Orca</strong>,
+      or copy it from:
+      <code class="path-code">
+      C:\Users\&lt;username&gt;\AppData\Roaming\Snapmaker_Orca\user\default\machine
+      </code>
+      If you modify the printer profile later in Snapmaker Orca, simply import it again.
+      Existing profiles are updated automatically.
+    </p>
+  </div>
+</section>
+
+<section>
+  <h2>Print Profile Handling</h2>
+
+  <div class="option-row">
+    <label>
+      <input type="radio" name="printProfileMode" id="printProfileModePreserve" value="preserve">
+      <span>Preserve source print profile</span>
+    </label>
+    <p class="hint">Recommended. Automatically detects the source print profile and maps it to the matching U1 profile.</p>
+  </div>
+
+  <div class="option-row">
+    <label>
+      <input type="radio" name="printProfileMode" id="printProfileModeForce" value="force">
+      <span>Force U1 print profile</span>
+    </label>
+
+    <div style="margin-top:10px; margin-left:23px">
+      <div id="profilesLoading">Loading profiles…</div>
+      <select id="forcedProfileId" style="display:none"></select>
+    </div>
+
+    <p class="hint">Ignores the source print profile and always uses the selected U1 print profile as conversion base.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Conversion Settings</h2>
+
+  <div class="option-row">
+    <label>
+      <span style="min-width:160px">Filament preset mode</span>
+      <select id="filamentPresetMode">
+        <option value="preserve">Preserve custom/vendor profiles, normalize unchanged Generic</option>
+        <option value="force_generic">Force Generic presets</option>
+      </select>
+    </label>
+    <p class="hint">Controls whether source filament presets are preserved as project presets or converted to Generic presets.</p>
+  </div>
+
+  <div class="option-row">
+    <label><input type="checkbox" id="forceExcludeObject"> <span>Enable Exclude Object</span></label>
+    <p class="hint">Keeps object-aware features available in Snapmaker Orca, such as Adaptive Bed Mesh and per-object handling.</p>
+  </div>
+
+  <div class="option-row">
+    <label><input type="checkbox" id="forceBrimOff"> <span>Disable automatic Brim</span></label>
+    <p class="hint">Prevents Snapmaker Orca from adding unwanted automatic brims to converted projects.</p>
+  </div>
+
+  <div class="option-row">
+    <label><input type="checkbox" id="autoFixOrganicVariableLayer"> <span>Automatically fix support compatibility</span></label>
+    <p class="hint">Applies the same automatic adjustment Bambu Studio makes when variable layer height is combined with tree/organic support, so the project opens cleanly in Snapmaker Orca/U1.</p>
+  </div>
+
+  <div class="option-row">
+    <label><input type="checkbox" id="smartProcessMerge"> <span>Merge changed process settings</span></label>
+    <p class="hint">Imports compatible print-setting changes from the MakerWorld profile while keeping U1 machine settings from the selected U1 base profile.</p>
+  </div>
+
+  <div class="option-row">
+    <label><input type="checkbox" id="strictProcessMerge"> <span>Strict process merge mode</span></label>
+    <p class="hint">Only imports changed print settings that already exist in the selected U1 base profile. Safer, but may preserve fewer MakerWorld changes.</p>
+  </div>
+
+  <div class="option-row">
+    <label><input type="checkbox" id="debugReport"> <span>Show conversion report</span></label>
+    <p class="hint">Writes a compact conversion report to the browser console for troubleshooting.</p>
+  </div>
+
+  <div class="option-row">
+    <label><input type="checkbox" id="deepDebugReport"> <span>Show reverse-engineering diagnostics</span></label>
+    <p class="hint">Adds detailed Bambu metadata, XML, paint, process and filament diagnostics to the report.</p>
+  </div>
+</section>
+
+<div class="save-row">
+  <button class="btn-primary" id="saveBtn">Save</button>
+  <span id="saveStatus"></span>
+</div>
+
+<script src="u1_custom_printer_profiles.js"></script>
+<script src="options.js"></script>
+</body>
+</html>
