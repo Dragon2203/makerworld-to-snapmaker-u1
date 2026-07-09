@@ -525,6 +525,8 @@ const SVG_ERROR   = `<svg class="convert-button__icon-error" viewBox="0 0 24 24"
   // ── MutationObservers ─────────────────────────────────────────────────────────
   new MutationObserver(() => {
     if (isInjecting) return;
+    if (!location.pathname.includes('/models/')) return;
+
     const wrapper = findSwiper();
     if (wrapper) injectU1Slide(wrapper);
     if (u1ModeActive) updateButton();
@@ -533,9 +535,14 @@ const SVG_ERROR   = `<svg class="convert-button__icon-error" viewBox="0 0 24 24"
   let lastPath = location.pathname;
   new MutationObserver(() => {
     if (isInjecting || location.pathname === lastPath) return;
-    lastPath      = location.pathname;
+
+    lastPath = location.pathname;
     injectedSlide = null;
     setU1Mode(false);
-    setTimeout(() => { const w = findSwiper(); if (w) injectU1Slide(w); }, 800);
+
+    if (!location.pathname.includes('/models/')) return;
+
+    const wrapper = findSwiper();
+    if (wrapper) injectU1Slide(wrapper);
   }).observe(document.body, { childList: true, subtree: true });
 })();
