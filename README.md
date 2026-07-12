@@ -156,7 +156,7 @@ The extension can also be loaded directly from the repository source folder in C
 
 A temporarily loaded Firefox extension remains installed until Firefox is restarted.
 
-Support for permanent installation through the Firefox Add-ons store may be added in a future release.
+The extension has been submitted to the Firefox Add-ons store and will be available for permanent installation after Mozilla's review has been completed.
 
 ---
 
