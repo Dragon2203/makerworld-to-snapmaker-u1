@@ -2,7 +2,16 @@
   "manifest_version": 3,
   "name": "MakerWorld to Snapmaker U1",
   "version": "1.1.0",
-  "version_name": "1.1.0",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "makerworld-to-snapmaker-u1@dragon2203",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  },
   "description": "Convert MakerWorld print profiles into Snapmaker U1 project files directly in your browser.",
   "permissions": ["downloads", "storage"],
   "host_permissions": ["https://makerworld.com/*"],
@@ -11,7 +20,9 @@
     "open_in_tab": true
   },
   "background": {
-    "service_worker": "background.js"
+    "scripts": [
+      "background.js"
+    ]
   },
   "content_scripts": [
     {

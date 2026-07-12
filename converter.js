@@ -4,7 +4,18 @@
 // parse source project → build U1 project → rewrite metadata → write output ZIP.
 
 const TARGET_FILAMENTS = 4;
-const U1_CONVERTER_VERSION = '1.0.0';
+
+function getConverterVersion() {
+  try {
+    return chrome.runtime.getManifest().version || 'unknown';
+  } catch (error) {
+    console.warn(
+      '[U1 Converter] Could not read extension version from manifest:',
+      error
+    );
+    return 'unknown';
+  }
+}
 
 function parseXml(str) {
   return new DOMParser().parseFromString(str, 'application/xml');
@@ -20,9 +31,33 @@ function padArray(arr, length, fillValue) {
   return out;
 }
 
+// Copy binary input into this script's own JavaScript realm.
+//
+// Firefox content scripts can expose fetched TypedArrays through an isolated
+// cross-compartment wrapper. JSZip then fails while detecting the input type.
+// A byte-by-byte copy avoids constructor, iterator and TypedArray species access
+// on the wrapped source object.
+function copyBinaryInputToLocalUint8Array(input) {
+  const length = Number(input?.byteLength);
+
+  if (!Number.isSafeInteger(length) || length <= 0) {
+    throw new TypeError('Invalid or empty 3MF input');
+  }
+
+  const localBytes = new Uint8Array(length);
+
+  for (let i = 0; i < length; i++) {
+    localBytes[i] = input[i];
+  }
+
+  return localBytes;
+}
+
 async function convertToU1(inputBuffer, opts = {}) {
   const conversionStartedAt = performance.now();
-  const zip = await JSZip.loadAsync(inputBuffer);
+
+  const localInput = copyBinaryInputToLocalUint8Array(inputBuffer);
+  const zip = await JSZip.loadAsync(localInput);
 
   // ── 1. Parse original 3MF into project object ─────────────────────────────
   const sourceProject = await parseProject(zip);
@@ -55,8 +90,7 @@ async function convertToU1(inputBuffer, opts = {}) {
   };
 
   project.converter = {
-    version: U1_CONVERTER_VERSION,
-    status: 'stable',
+    version: getConverterVersion(),
     conversionMs: Math.round(performance.now() - conversionStartedAt),
   };
 

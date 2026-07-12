@@ -6,6 +6,36 @@ This project follows the principles of **Keep a Changelog** and uses **Semantic 
 
 ---
 
+## [1.1.0] - 2026-07-12
+
+### Added
+
+* Official Mozilla Firefox support.
+* Dedicated Firefox manifest and background-script configuration.
+* Separate Chrome/Chromium and Firefox build packages.
+* PowerShell build script for generating browser-specific release folders, release archives and Mozilla source packages.
+* Firefox-compatible download pipeline for converted `.3mf` files.
+
+### Improved
+
+* Conversion success and failure states now remain visible until the user interacts with another MakerWorld element or starts another conversion.
+* Download handling now waits for confirmation from the browser before displaying a successful conversion state.
+* Improved cross-browser storage handling for Chrome, Chromium and Firefox.
+* Improved Firefox compatibility for large binary `.3mf` projects and JSZip processing.
+* Converter report now reads the installed extension version directly from the active browser manifest.
+* Chrome and Firefox now use the same shared converter, content script and background code.
+* Replaced all project-specific `innerHTML` usage with DOM API creation (`createElement`, `textContent`, `append`) to improve security and satisfy Firefox Add-on validation.
+
+### Fixed
+
+* Fixed Firefox failing to process binary project data across isolated JavaScript contexts.
+* Fixed Firefox being unable to download Blob URLs created in the MakerWorld page context.
+* Fixed Chrome being incorrectly detected as Firefox on browsers exposing a compatible `browser` namespace.
+* Fixed the converter report displaying an outdated hard-coded version number.
+* Removed the unused hard-coded converter status field.
+
+---
+
 ## [1.0.0] - 2026-07-07
 
 ### Added

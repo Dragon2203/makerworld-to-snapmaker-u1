@@ -1,11 +1,32 @@
 // MakerWorld → Snapmaker U1 content script
 // Conversion is handled entirely in-browser via converter.js + JSZip (no external service needed).
 
-// Inline SVGs — avoids external asset loading, safe under MV3 CSP
-const SVG_READY = `<svg class="convert-button__icon-ready" viewBox="0 0 24 24" focusable="false"><path d="M7 7h10l-2.7-2.7 1.4-1.4L20.8 8l-5.1 5.1-1.4-1.4L17 9H7V7Zm10 10H7l2.7 2.7-1.4 1.4L3.2 16l5.1-5.1 1.4 1.4L7 15h10v2Z" fill="currentColor"/></svg>`;
-const SVG_LOADING = `<svg class="convert-button__icon-loading" viewBox="0 0 24 24" focusable="false"><path d="M12 3a9 9 0 1 0 8.49 6h-2.18A7 7 0 1 1 12 5c1.93 0 3.68.78 4.95 2.05L14 10h7V3l-2.63 2.63A8.96 8.96 0 0 0 12 3Z" fill="currentColor"/></svg>`;
-const SVG_SUCCESS = `<svg class="convert-button__icon-success" viewBox="0 0 24 24" focusable="false"><path d="m9.2 16.2-4.4-4.4 1.4-1.4 3 3 8.6-8.6 1.4 1.4-10 10Z" fill="currentColor"/></svg>`;
-const SVG_ERROR   = `<svg class="convert-button__icon-error" viewBox="0 0 24 24" focusable="false"><path d="M12 2 1 21h22L12 2Zm0 5 6.1 12H5.9L12 7Zm-1 3v5h2v-5h-2Zm0 6.5v2h2v-2h-2Z" fill="currentColor"/></svg>`;
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+
+const BUTTON_ICON_PATHS = {
+  ready:
+    'M7 7h10l-2.7-2.7 1.4-1.4L20.8 8l-5.1 5.1-1.4-1.4L17 9H7V7Zm10 10H7l2.7 2.7-1.4 1.4L3.2 16l5.1-5.1 1.4 1.4L7 15h10v2Z',
+  loading:
+    'M12 3a9 9 0 1 0 8.49 6h-2.18A7 7 0 1 1 12 5c1.93 0 3.68.78 4.95 2.05L14 10h7V3l-2.63 2.63A8.96 8.96 0 0 0 12 3Z',
+  success:
+    'm9.2 16.2-4.4-4.4 1.4-1.4 3 3 8.6-8.6 1.4 1.4-10 10Z',
+  error:
+    'M12 2 1 21h22L12 2Zm0 5 6.1 12H5.9L12 7Zm-1 3v5h2v-5h-2Zm0 6.5v2h2v-2h-2Z',
+};
+
+function createButtonIconSvg(state) {
+  const svg = document.createElementNS(SVG_NAMESPACE, 'svg');
+  svg.classList.add(`convert-button__icon-${state}`);
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('focusable', 'false');
+
+  const path = document.createElementNS(SVG_NAMESPACE, 'path');
+  path.setAttribute('d', BUTTON_ICON_PATHS[state]);
+  path.setAttribute('fill', 'currentColor');
+
+  svg.appendChild(path);
+  return svg;
+}
 
 (() => {
   const SETTING_DEFAULTS = {
@@ -27,7 +48,100 @@ const SVG_ERROR   = `<svg class="convert-button__icon-error" viewBox="0 0 24 24"
   let isInjecting        = false;
   let isConverting       = false;
   let _bypassInterceptor = false;
-  let _btnState          = null; // tracks rendered state; prevents MO→updateButton→textContent→MO loops
+  let _btnState          = null;    // currently rendered DOM state
+  let _resultState       = 'ready'; // persistent state for the current page interaction
+
+  const isFirefox =
+    chrome.runtime.getURL('').startsWith('moz-extension://');
+
+  // Cross-browser storage helpers:
+  // Firefox uses the Promise-based browser.* namespace.
+  // Chrome/Chromium uses the callback-compatible chrome.* namespace.
+  async function getStorageSyncSafe(defaults) {
+    try {
+      if (
+        typeof browser !== 'undefined' &&
+        browser.storage?.sync?.get
+      ) {
+        const result = await browser.storage.sync.get(defaults);
+        return result ?? { ...defaults };
+      }
+
+      if (
+        typeof chrome !== 'undefined' &&
+        chrome.storage?.sync?.get
+      ) {
+        return await new Promise((resolve) => {
+          chrome.storage.sync.get(defaults, (result) => {
+            if (chrome.runtime?.lastError) {
+              console.warn(
+                '[U1 Extension] sync storage read failed, using defaults:',
+                chrome.runtime.lastError.message
+              );
+              resolve({ ...defaults });
+              return;
+            }
+
+            resolve(result ?? { ...defaults });
+          });
+        });
+      }
+    } catch (error) {
+      console.warn(
+        '[U1 Extension] sync storage read failed, using defaults:',
+        error
+      );
+    }
+
+    console.warn(
+      '[U1 Extension] extension sync storage unavailable, using defaults'
+    );
+
+    return { ...defaults };
+  }
+
+  async function getStorageLocalSafe(defaults) {
+    try {
+      if (
+        typeof browser !== 'undefined' &&
+        browser.storage?.local?.get
+      ) {
+        const result = await browser.storage.local.get(defaults);
+        return result ?? { ...defaults };
+      }
+
+      if (
+        typeof chrome !== 'undefined' &&
+        chrome.storage?.local?.get
+      ) {
+        return await new Promise((resolve) => {
+          chrome.storage.local.get(defaults, (result) => {
+            if (chrome.runtime?.lastError) {
+              console.warn(
+                '[U1 Extension] local storage read failed, using defaults:',
+                chrome.runtime.lastError.message
+              );
+              resolve({ ...defaults });
+              return;
+            }
+
+            resolve(result ?? { ...defaults });
+          });
+        });
+      }
+    } catch (error) {
+      console.warn(
+        '[U1 Extension] local storage read failed, using defaults:',
+        error
+      );
+    }
+
+    console.warn(
+      '[U1 Extension] extension local storage unavailable, using defaults'
+    );
+
+    return { ...defaults };
+  }
 
   // ── Styles ────────────────────────────────────────────────────────────────────
   const __u1Style = document.createElement('style');
@@ -120,25 +234,45 @@ const SVG_ERROR   = `<svg class="convert-button__icon-error" viewBox="0 0 24 24"
     return document.querySelector('span.primaryButton');
   }
 
-  // One-time injection of button structure into MakerWorld's inner label span.
-  // After this, all state changes go through setConvertButtonState() — no innerHTML.
+  // One-time creation of the button structure inside MakerWorld's label span.
+  // All elements are created through DOM APIs; no HTML strings are parsed.
   function ensureButtonUI(btn) {
     const label = btn.querySelector('span');
     if (!label || label.querySelector('.convert-button__label')) return;
-    label.dataset.origText = label.textContent.trim() || 'Open in Bambu Studio';
+
+    label.dataset.origText =
+      label.textContent.trim() || 'Open in Bambu Studio';
+
     label.classList.add('u1-btn');
-    _btnState = null; // fresh injection — force next setConvertButtonState to write DOM
-    label.innerHTML =
-      `<span class="convert-button__progress" aria-hidden="true"></span>` +
-      `<span class="convert-button__content">` +
-        `<span class="convert-button__icon" aria-hidden="true">` +
-          SVG_READY + SVG_LOADING + SVG_SUCCESS + SVG_ERROR +
-        `</span>` +
-        `<span class="convert-button__label">Convert to Snapmaker U1</span>` +
-      `</span>`;
+    _btnState = null;
+
+    const progress = document.createElement('span');
+    progress.className = 'convert-button__progress';
+    progress.setAttribute('aria-hidden', 'true');
+
+    const content = document.createElement('span');
+    content.className = 'convert-button__content';
+
+    const icon = document.createElement('span');
+    icon.className = 'convert-button__icon';
+    icon.setAttribute('aria-hidden', 'true');
+
+    icon.append(
+      createButtonIconSvg('ready'),
+      createButtonIconSvg('loading'),
+      createButtonIconSvg('success'),
+      createButtonIconSvg('error')
+    );
+
+    const buttonLabel = document.createElement('span');
+    buttonLabel.className = 'convert-button__label';
+    buttonLabel.textContent = 'Convert to Snapmaker U1';
+
+    content.append(icon, buttonLabel);
+    label.replaceChildren(progress, content);
   }
 
-  // classList + textContent only — no innerHTML after initial injection
+  // Update the existing button through classList and textContent only.
   function setConvertButtonState(btn, state) {
     if (_btnState === state) return; // idempotency guard: same state → no DOM mutation → no MO loop
     const label   = btn?.querySelector('span');
@@ -164,8 +298,18 @@ const SVG_ERROR   = `<svg class="convert-button__icon-error" viewBox="0 0 24 24"
     _btnState = state;
   }
 
+  function resetConversionResult() {
+    _resultState = 'ready';
+
+    if (u1ModeActive && !isConverting) {
+      updateButton();
+    }
+  }
+  
   function setU1Mode(active) {
     u1ModeActive = active;
+    _resultState = 'ready';
+
     window.postMessage({ __u1SetMode: active }, '*');
     updateButton();
   }
@@ -179,7 +323,7 @@ const SVG_ERROR   = `<svg class="convert-button__icon-error" viewBox="0 0 24 24"
 
     if (u1ModeActive) {
       ensureButtonUI(btn);
-      setConvertButtonState(btn, 'ready');
+      setConvertButtonState(btn, _resultState);
     } else {
       // Tear down our UI and restore MakerWorld's original text
       if (label.querySelector('.convert-button__label')) {
@@ -193,11 +337,31 @@ const SVG_ERROR   = `<svg class="convert-button__icon-error" viewBox="0 0 24 24"
   }
 
   // ── Button click interception ─────────────────────────────────────────────────
+
+  // Reset a previous success/error result when the user interacts with
+  // another part of MakerWorld. No profile-specific state is stored.
+  document.addEventListener('click', (e) => {
+    if (!u1ModeActive || isConverting || _resultState === 'ready') return;
+
+    if (e.target.closest('span.primaryButton')) return;
+    if (e.target.closest('[data-u1-slide]')) return;
+
+    resetConversionResult();
+  }, true);
+
+  // Start or repeat the conversion when the main MakerWorld button is clicked.
   document.addEventListener('click', (e) => {
     if (!u1ModeActive || _bypassInterceptor) return;
+
     const btn = e.target.closest('span.primaryButton');
     if (!btn) return;
-    if (isConverting) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+
+    if (isConverting) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+
     e.preventDefault();
     e.stopImmediatePropagation();
     startConversion(btn);
@@ -214,12 +378,16 @@ const SVG_ERROR   = `<svg class="convert-button__icon-error" viewBox="0 0 24 24"
 
       const resp = await fetch(blobUrl);
       if (!resp.ok) throw new Error(`Blob fetch failed: ${resp.status}`);
-      let buffer = await resp.arrayBuffer();
+
+      let buffer = new Uint8Array(await resp.arrayBuffer());
 
       // 2. Handle JSON → CDN URL (MakerWorld returns JSON with a CDN link, not raw ZIP)
       let mwName = null;
-      const magic = new Uint8Array(buffer, 0, 2);
-      if (magic[0] !== 0x50 || magic[1] !== 0x4B) {
+
+      // Read the ZIP signature directly.
+      // Firefox may block TypedArray.subarray() across isolated realms
+      // because it accesses the object's constructor internally.
+      if (buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
         const json = JSON.parse(new TextDecoder().decode(buffer));
         mwName = json.name || null;
         const cdnUrl = json.url || json.downloadUrl || json.download_url
@@ -227,39 +395,11 @@ const SVG_ERROR   = `<svg class="convert-button__icon-error" viewBox="0 0 24 24"
         if (!cdnUrl) throw new Error('No download URL in response');
         const cdnResp = await fetch(cdnUrl);
         if (!cdnResp.ok) throw new Error(`CDN fetch failed: ${cdnResp.status}`);
-        buffer = await cdnResp.arrayBuffer();
+        buffer = new Uint8Array(await cdnResp.arrayBuffer());
       }
 
       // 3. Load current settings + filament rules, then convert in-browser
-      const getStorageSafe = (defaults) => new Promise(resolve => {
-        try {
-          if (chrome?.storage?.sync?.get) {
-            chrome.storage.sync.get(defaults, resolve);
-          } else {
-            console.warn('[U1 Extension] chrome.storage.sync unavailable, using defaults');
-            resolve(defaults);
-          }
-        } catch (e) {
-          console.warn('[U1 Extension] storage read failed, using defaults', e);
-          resolve(defaults);
-        }
-      });
-
-      const getLocalStorageSafe = (defaults) => new Promise(resolve => {
-        try {
-          if (chrome?.storage?.local?.get) {
-            chrome.storage.local.get(defaults, resolve);
-          } else {
-            console.warn('[U1 Extension] chrome.storage.local unavailable, using defaults');
-            resolve(defaults);
-          }
-        } catch (e) {
-          console.warn('[U1 Extension] local storage read failed, using defaults', e);
-          resolve(defaults);
-        }
-      });
-
-      const currentSettings = await getStorageSafe(SETTING_DEFAULTS);
+      const currentSettings = await getStorageSyncSafe(SETTING_DEFAULTS);
 
       let customPrinterProfile = null;
       let customPrinterProfileMissing = false;
@@ -268,7 +408,7 @@ const SVG_ERROR   = `<svg class="convert-button__icon-error" viewBox="0 0 24 24"
         currentSettings.customPrinterProfileId || U1_CUSTOM_PRINTER_STANDARD_ID;
 
       if (selectedCustomPrinterProfileId !== U1_CUSTOM_PRINTER_STANDARD_ID) {
-        const localSettings = await getLocalStorageSafe({
+        const localSettings = await getStorageLocalSafe({
           u1CustomPrinterProfiles: {},
         });
 
@@ -292,45 +432,82 @@ const SVG_ERROR   = `<svg class="convert-button__icon-error" viewBox="0 0 24 24"
         selectedCustomPrinterProfileId,
       });
 
-      // 4. Trigger download directly from the content script.
-      // Do NOT send the full file through chrome.runtime.sendMessage:
-      // Chrome messages are limited to ~64 MiB and large MakerWorld 3MFs fail.
+      // 4. Start the converted file download.
+      //
+      // Chrome/Chromium sends only a Blob URL to the background script,
+      // avoiding large runtime messages.
+      //
+      // Firefox cannot access a MakerWorld-context Blob URL from the
+      // background page, so it receives the finished bytes instead.
       const slug     = location.pathname.match(/\/models\/\d+-(.+)/)?.[1] || 'model';
       const baseName = (mwName || (slug.replace(/-/g, '_') + '.3mf')).replace(/\.3mf$/i, '');
       const outName  = baseName + '-U1.3mf';
 
-      const outBlob = new Blob([converted], { type: 'application/octet-stream' });
-      const outUrl  = URL.createObjectURL(outBlob);
+      if (isFirefox) {
+        // Firefox cannot use a MakerWorld-context Blob URL in the
+        // background downloads API. Send the finished bytes instead.
+        const downloadData = converted.buffer.slice(
+          converted.byteOffset,
+          converted.byteOffset + converted.byteLength
+        );
 
-      try {
-        chrome.runtime.sendMessage({
-          type: 'u1_download',
-          url: outUrl,
-          filename: outName
-        }, (response) => {
-          if (chrome.runtime.lastError) {
-            console.warn('[U1 Extension] download message failed:', chrome.runtime.lastError.message);
-            return;
-          }
-
-          if (!response?.ok) {
-            console.warn('[U1 Extension] download failed:', response?.error);
-          }
+        const response = await browser.runtime.sendMessage({
+          type: 'u1_download_firefox',
+          data: downloadData,
+          filename: outName,
         });
-      } finally {
-        setTimeout(() => URL.revokeObjectURL(outUrl), 60_000);
+
+        if (!response?.ok) {
+          throw new Error(
+            response?.error || 'Firefox download could not be started'
+          );
+        }
+      } else {
+        // Chrome/Chromium uses the existing Blob URL download path.
+        const outBlob = new Blob(
+          [converted],
+          { type: 'application/octet-stream' }
+        );
+        const outUrl = URL.createObjectURL(outBlob);
+
+        try {
+          await new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({
+              type: 'u1_download',
+              url: outUrl,
+              filename: outName
+            }, (response) => {
+              if (chrome.runtime.lastError) {
+                reject(new Error(
+                  chrome.runtime.lastError.message
+                ));
+                return;
+              }
+
+              if (!response?.ok) {
+                reject(new Error(
+                  response?.error || 'Download could not be started'
+                ));
+                return;
+              }
+
+              resolve(response);
+            });
+          });
+        } finally {
+          setTimeout(() => URL.revokeObjectURL(outUrl), 60_000);
+        }
       }
 
-      setConvertButtonState(btn, 'success');
-      await new Promise(r => setTimeout(r, 1250));
+      _resultState = 'success';
+      setConvertButtonState(btn, _resultState);
     } catch (err) {
       console.error('[U1 Extension]', err);
-      setConvertButtonState(btn, 'error');
-      await new Promise(r => setTimeout(r, 2500));
+      _resultState = 'error';
+      setConvertButtonState(btn, _resultState);
     } finally {
       isConverting       = false;
       _bypassInterceptor = false;
-      setConvertButtonState(btn, 'ready');
     }
   }
 

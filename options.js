@@ -58,7 +58,7 @@ async function loadProfiles(savedForcedProfileId) {
   try {
     const profiles = await fetch(chrome.runtime.getURL('assets/profiles.json')).then(r => r.json());
 
-    select.innerHTML = '';
+    select.replaceChildren();
 
     profiles.forEach(p => {
       const opt = document.createElement('option');
@@ -106,52 +106,95 @@ function formatCustomPrinterProfileDate(value) {
   return date.toLocaleString();
 }
 
+function createProfileInfoRow(labelText, valueNodeOrText) {
+  const row = document.createElement('div');
+  row.className = 'profile-info-row';
+
+  const label = document.createElement('strong');
+  label.textContent = labelText;
+
+  const value = document.createElement('span');
+
+  if (valueNodeOrText instanceof Node) {
+    value.appendChild(valueNodeOrText);
+  } else {
+    value.textContent = String(valueNodeOrText ?? '');
+  }
+
+  row.append(label, value);
+  return row;
+}
+
+function createChangedSettingsDetails(changedSettings) {
+  if (!changedSettings.length) {
+    return document.createTextNode('None');
+  }
+
+  const details = document.createElement('details');
+
+  const summary = document.createElement('summary');
+  summary.textContent =
+    `${changedSettings.length} setting${changedSettings.length === 1 ? '' : 's'}`;
+
+  const list = document.createElement('ul');
+  list.style.margin = '6px 0 0 16px';
+  list.style.padding = '0';
+
+  [...changedSettings]
+    .sort((a, b) => String(a).localeCompare(String(b)))
+    .forEach((key) => {
+      const item = document.createElement('li');
+      const code = document.createElement('code');
+
+      code.textContent = String(key);
+      item.appendChild(code);
+      list.appendChild(item);
+    });
+
+  details.append(summary, list);
+  return details;
+}
+
 function renderCustomPrinterProfileInfo(profile) {
   const info = document.getElementById('customPrinterProfileInfo');
   if (!info) return;
 
+  info.replaceChildren();
+
   if (!profile) {
     info.style.display = 'none';
-    info.innerHTML = '';
     return;
   }
 
   info.style.display = 'block';
+
   const changedSettings =
     profile.overrideKeys?.length
       ? profile.overrideKeys
       : Object.keys(profile.overrides || {});
 
-  const changedSettingsHtml = changedSettings.length
-    ? `
-      <details>
-        <summary>${changedSettings.length} setting${changedSettings.length === 1 ? '' : 's'}</summary>
-        <ul style="margin:6px 0 0 16px; padding:0">
-          ${changedSettings
-            .sort((a, b) => a.localeCompare(b))
-            .map(key => `<li><code>${escapeHtml(key)}</code></li>`)
-            .join('')}
-        </ul>
-      </details>
-    `
-    : 'None';
-
-  info.innerHTML = `
-    <div class="profile-info-row"><strong>Name</strong><span>${escapeHtml(profile.displayName || profile.id || '')}</span></div>
-    <div class="profile-info-row"><strong>Based on</strong><span>${escapeHtml(profile.inheritedFrom || 'unknown')}</span></div>
-    <div class="profile-info-row"><strong>Imported</strong><span>${escapeHtml(formatCustomPrinterProfileDate(profile.importedAt))}</span></div>
-    <div class="profile-info-row"><strong>Changed settings</strong><span>${changedSettingsHtml}</span></div>
-    <div class="profile-info-row"><strong>Source</strong><span>manual import</span></div>
-  `;
-}
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+  info.append(
+    createProfileInfoRow(
+      'Name',
+      profile.displayName || profile.id || ''
+    ),
+    createProfileInfoRow(
+      'Based on',
+      profile.inheritedFrom || 'unknown'
+    ),
+    createProfileInfoRow(
+      'Imported',
+      formatCustomPrinterProfileDate(profile.importedAt)
+    ),
+    createProfileInfoRow(
+      'Changed settings',
+      createChangedSettingsDetails(changedSettings)
+    ),
+    createProfileInfoRow(
+      'Source',
+      'manual import'
+    )
+  );
 }
 
 function renderCustomPrinterProfileSelect(savedId = U1_CUSTOM_PRINTER_STANDARD_ID) {
@@ -160,7 +203,7 @@ function renderCustomPrinterProfileSelect(savedId = U1_CUSTOM_PRINTER_STANDARD_I
 
   if (!select) return;
 
-  select.innerHTML = '';
+  select.replaceChildren();
 
   const standard = document.createElement('option');
   standard.value = U1_CUSTOM_PRINTER_STANDARD_ID;

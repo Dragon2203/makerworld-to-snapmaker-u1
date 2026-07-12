@@ -2,7 +2,8 @@
 
 Convert MakerWorld print profiles into native Snapmaker U1 projects with a single click.
 
-MakerWorld to Snapmaker U1 is a Chrome extension that integrates directly into MakerWorld and adds a dedicated **"Convert to Snapmaker U1"** button.
+MakerWorld to Snapmaker U1 is a browser extension for Chrome, Chromium-based browsers and Firefox. It integrates directly into MakerWorld and adds a dedicated **"Convert to Snapmaker U1"** button.
+
 
 Instead of downloading a project, uploading it to an external converter and adjusting settings manually, simply click **Convert to Snapmaker U1**, open the generated project in **Snapmaker Orca** and start printing.
 
@@ -122,25 +123,53 @@ Choose whether filament presets should be preserved whenever possible or convert
 
 ## Installation
 
-1. Download or clone this repository.
-2. Open `chrome://extensions`.
-3. Enable **Developer Mode**.
-4. Click **Load unpacked**.
-5. Select the `makerworld-to-snapmaker-u1` folder.
-6. The first time you start a conversion, your browser may ask for permission to open the downloaded project with Snapmaker Orca. Click **Allow** to remember this choice.
+Browser-specific packages are generated in the `dist` directory.
+
+### Chrome and Chromium-based browsers
+
+1. Download `makerworld-to-snapmaker-u1-chrome-v1.1.0.zip` from the latest GitHub release.
+
+2. Extract the ZIP archive.
+
+3. Open your browser's extension management page:
+
+   * Chrome: `chrome://extensions`
+   * Edge: `edge://extensions`
+   * Brave: `brave://extensions`
+
+4. Enable **Developer Mode**.
+
+5. Click **Load unpacked**.
+
+6. Select the extracted extension folder.
+
+The extension can also be loaded directly from the repository source folder in Chrome or another Chromium-based browser.
+
+### Firefox
+
+1. Download `makerworld-to-snapmaker-u1-firefox-v1.1.0.zip` from the latest GitHub release.
+2. Extract the ZIP archive.
+3. Open `about:debugging`.
+4. Select **This Firefox**.
+5. Click **Load Temporary Add-on**.
+6. Select the extracted `manifest.json`.
+
+A temporarily loaded Firefox extension remains installed until Firefox is restarted.
+
+Support for permanent installation through the Firefox Add-ons store may be added in a future release.
 
 ---
 
 ## Browser Support
 
-| Browser | Status |
-|---------|--------|
-| Chrome | ✅ |
-| Edge | ✅ |
-| Brave | ✅ |
-| Other Chromium browsers | Expected |
-| Firefox | ❌ |
-| Safari | ❌ |
+| Browser                       | Status                                   |
+| ----------------------------- | ---------------------------------------- |
+| Google Chrome                 | ✅ Supported                              |
+| Microsoft Edge                | ✅ Supported through the Chromium package |
+| Brave                         | ✅ Supported through the Chromium package |
+| Other Chromium-based browsers | ✅ Expected to work                       |
+| Mozilla Firefox               | ✅ Supported                              |
+| Safari                        | ❌ Not supported                          |
 
 ---
 
@@ -151,6 +180,8 @@ Choose whether filament presets should be preserved whenever possible or convert
 No.
 
 All conversion happens locally inside your browser.
+
+The same local conversion engine is used in both Chrome/Chromium and Firefox.
 
 ---
 
@@ -173,6 +204,32 @@ Custom Snapmaker Orca printer profiles can be imported directly from the Options
 ### Does the converter preserve the original settings?
 
 The converter preserves the creator's original print settings whenever possible while automatically adjusting settings that are required for Snapmaker Orca compatibility.
+
+---
+
+## Development
+
+The repository contains separate manifests for Chrome/Chromium and Firefox while sharing the same converter and extension source files.
+
+On Windows, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build.ps1
+```
+
+The build script validates that both browser manifests use the same version and generates:
+
+```text
+dist/
+├── chrome/
+├── firefox/
+├── source/
+├── makerworld-to-snapmaker-u1-chrome-v1.1.0.zip
+├── makerworld-to-snapmaker-u1-firefox-v1.1.0.zip
+└── makerworld-to-snapmaker-u1-source-v1.1.0.zip
+```
+
+The `dist` directory is generated locally and is excluded from Git.
 
 ---
 

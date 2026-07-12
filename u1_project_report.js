@@ -21,7 +21,6 @@ function logU1ProjectReport(project) {
 
   console.log('converter:', {
     version: project.converter?.version || 'unknown',
-    status: project.converter?.status || 'unknown',
     conversionMs: project.converter?.conversionMs ?? null,
   });
 
