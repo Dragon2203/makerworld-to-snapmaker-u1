@@ -19,9 +19,19 @@ function logU1ProjectReport(project) {
 
   console.groupCollapsed('[U1 Project Report]');
 
+  const conversionMs =
+    project.converter?.conversionMs;
+
+  const conversionTime =
+    Number.isFinite(conversionMs)
+      ? conversionMs >= 1000
+        ? `${(conversionMs / 1000).toFixed(2)} s`
+        : `${conversionMs.toFixed(0)} ms`
+      : null;
+
   console.log('converter:', {
     version: project.converter?.version || 'unknown',
-    conversionMs: project.converter?.conversionMs ?? null,
+    conversionTime,
   });
 
   console.log('summary:', {
@@ -43,7 +53,6 @@ function logU1ProjectReport(project) {
     vertices: model.totalVertices ?? null,
     triangles: model.totalTriangles ?? null,
 
-    hasPaint: project.analysis?.features?.hasPaint ?? false,
     hasSupport: project.analysis?.features?.hasSupport ?? false,
     hasAdaptiveLayer: project.analysis?.features?.hasAdaptiveLayer ?? false,
     hasMultiColor: project.analysis?.features?.hasMultiColor ?? false,
@@ -55,6 +64,13 @@ function logU1ProjectReport(project) {
     compatibilityActions: compatibility.actions?.length || 0,
     compatibilityWarnings: compatibility.warnings?.length || 0,
   });
+
+  logU1PerformanceReport(
+    project.converter?.performance,
+    deepDebugReport
+      ? project.analysis?.parserPerformance
+      : null
+  );
 
   console.groupCollapsed('converter options');
   console.table(formatConverterOptionsForReport(options));
@@ -181,6 +197,173 @@ function logU1ProjectReport(project) {
   console.groupEnd();
 }
 
+function logU1PerformanceReport(
+  performanceData,
+  parserPerformance
+) {
+  if (!performanceData) return;
+
+  const timings = performanceData.timings || {};
+
+  const formatMs = value => {
+    if (!Number.isFinite(value)) return null;
+
+    return value >= 1000
+      ? `${(value / 1000).toFixed(2)} s`
+      : `${value.toFixed(2)} ms`;
+  };
+
+  const formatBytes = value => {
+    if (!Number.isFinite(value)) return null;
+
+    const units = ['B', 'KB', 'MB', 'GB'];
+
+    let size = value;
+    let unitIndex = 0;
+
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+
+    return `${size.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
+  };
+
+  console.groupCollapsed('performance');
+
+  console.table([
+    {
+      stage: 'Project parse',
+      duration: formatMs(timings.projectParseMs),
+    },
+    {
+      stage: 'Build U1 project',
+      duration: formatMs(timings.projectBuildMs),
+    },
+    {
+      stage: 'Metadata rewrite',
+      duration: formatMs(timings.metadataRewriteMs),
+    },
+    {
+      stage: 'Copy ZIP entries',
+      duration: formatMs(timings.zipEntryCopyMs),
+    },
+    {
+      stage: 'Generate output ZIP',
+      duration: formatMs(timings.zipGenerateMs),
+    },
+    {
+      stage: 'Total',
+      duration: formatMs(timings.totalMs),
+    },
+  ]);
+
+  console.log('ZIP statistics:', {
+    inputSize: formatBytes(performanceData.inputBytes),
+    outputSize: formatBytes(performanceData.outputBytes),
+
+    zipEntries: performanceData.zipEntryCount ?? null,
+    copiedFiles: performanceData.copiedFileCount ?? null,
+    rewrittenFiles: performanceData.rewrittenFileCount ?? null,
+    directories: performanceData.directoryCount ?? null,
+
+    skippedUnsafeFiles:
+      performanceData.skippedUnsafeFileCount ?? null,
+
+    compression: performanceData.compression || null,
+  });
+
+  if (parserPerformance) {
+    const parserTimings = parserPerformance.timings || {};
+    const bambuStatistics = parserPerformance.bambu || {};
+
+    console.groupCollapsed('parser performance');
+
+    console.table([
+      {
+        stage: 'Collect ZIP entries',
+        duration: formatMs(parserTimings.collectEntriesMs),
+      },
+      {
+        stage: 'Group ZIP entries',
+        duration: formatMs(parserTimings.collectGroupsMs),
+      },
+      {
+        stage: 'Project settings',
+        duration: formatMs(parserTimings.projectSettingsMs),
+      },
+      {
+        stage: 'Slice info',
+        duration: formatMs(parserTimings.sliceInfoMs),
+      },
+      {
+        stage: 'Model settings',
+        duration: formatMs(parserTimings.modelSettingsMs),
+      },
+      {
+        stage: 'Main 3D model',
+        duration: formatMs(parserTimings.mainModelMs),
+      },
+      {
+        stage: 'Layer heights profile',
+        duration: formatMs(parserTimings.layerHeightsProfileMs),
+      },
+      {
+        stage: 'Link model objects',
+        duration: formatMs(parserTimings.linkObjectsMs),
+      },
+      {
+        stage: 'Model analysis',
+        duration: formatMs(parserTimings.modelAnalysisMs),
+      },
+      {
+        stage: 'Bambu diagnostics',
+        duration: formatMs(parserTimings.bambuDiagnosticsMs),
+      },
+      {
+        stage: 'Source filament parsing',
+        duration: formatMs(parserTimings.sourceFilamentsMs),
+      },
+      {
+        stage: 'Feature analysis',
+        duration: formatMs(parserTimings.featureAnalysisMs),
+      },
+      {
+        stage: 'Assemble project object',
+        duration: formatMs(parserTimings.assembleProjectMs),
+      },
+      {
+        stage: 'Parser total',
+        duration: formatMs(parserTimings.totalMs),
+      },
+    ]);
+
+    console.log('Bambu diagnostics statistics:', {
+      candidateFiles: bambuStatistics.candidateFiles ?? null,
+      parsedFiles: bambuStatistics.parsedFiles ?? null,
+      textLikeFiles: bambuStatistics.textLikeFiles ?? null,
+      xmlFiles: bambuStatistics.xmlFiles ?? null,
+      jsonFiles: bambuStatistics.jsonFiles ?? null,
+
+      textSize:
+        formatBytes(bambuStatistics.textCharacters),
+
+      textCharacters:
+        bambuStatistics.textCharacters ?? null,
+
+      filesWithPaint:
+        bambuStatistics.filesWithPaint ?? null,
+
+      filesWithInterestingAttributes:
+        bambuStatistics.filesWithInterestingAttributes ?? null,
+    });
+
+    console.groupEnd();
+  }
+
+  console.groupEnd();
+}
+
 function formatConverterOptionsForReport(options = {}) {
   const out = {};
 
@@ -248,15 +431,30 @@ function logU1DeepDiagnostics(project) {
   const bambuFiles = project.analysis?.bambu?.files || [];
 
   console.log('summary:', {
-    metadataFiles: bambuSummary.metadataFiles?.length || 0,
-    relationshipFiles: bambuSummary.relationshipFiles?.length || 0,
-    modelFiles: bambuSummary.modelFiles?.length || 0,
-    filesWithNamespaces: bambuSummary.filesWithNamespaces?.length || 0,
-    filesWithBambuAttributes: bambuSummary.filesWithBambuAttributes?.length || 0,
-    xmlFiles: bambuSummary.xmlFiles?.length || 0,
-    jsonFiles: bambuSummary.jsonFiles?.length || 0,
-  });
+    hasPaint:
+      project.analysis?.features?.hasPaint ?? false,
 
+    metadataFiles:
+      bambuSummary.metadataFiles?.length || 0,
+
+    relationshipFiles:
+      bambuSummary.relationshipFiles?.length || 0,
+
+    modelFiles:
+      bambuSummary.modelFiles?.length || 0,
+
+    filesWithNamespaces:
+      bambuSummary.filesWithNamespaces?.length || 0,
+
+    filesWithBambuAttributes:
+      bambuSummary.filesWithBambuAttributes?.length || 0,
+
+    xmlFiles:
+      bambuSummary.xmlFiles?.length || 0,
+
+    jsonFiles:
+      bambuSummary.jsonFiles?.length || 0,
+  });
   console.log(`bambu files: ${bambuFiles.length}`, bambuFiles);
 
   console.log(

@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
+
+## [1.2.0] - 2026-07-14
+
+### Improved
+
+- Significantly improved conversion performance for large MakerWorld projects.
+- Moved the reverse-engineering diagnostics behind the optional Deep Debug mode.
+- Reduced ZIP generation time by using a more efficient compression level.
+- Simplified and reorganized the converter report for improved readability.
+- Added a detailed performance breakdown to help identify conversion bottlenecks.
+
+### Changed
+
+- Reverse-engineering diagnostics are now only executed when **Deep Debug Report** is enabled.
+- Removed reverse-engineering-only information from the standard converter report.
+
+---
+
 ## [1.1.1] - 2026-07-14
 
 ### Fixed

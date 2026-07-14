@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MakerWorld to Snapmaker U1",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "browser_specific_settings": {
     "gecko": {
       "id": "makerworld-to-snapmaker-u1@dragon2203",

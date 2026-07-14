@@ -55,14 +55,17 @@ function copyBinaryInputToLocalUint8Array(input) {
 
 async function convertToU1(inputBuffer, opts = {}) {
   const conversionStartedAt = performance.now();
+  const performanceTimings = {};
 
+  let stageStartedAt = performance.now();
   const localInput = copyBinaryInputToLocalUint8Array(inputBuffer);
+  performanceTimings.inputCopyMs = performance.now() - stageStartedAt;
+
+  stageStartedAt = performance.now();
   const zip = await JSZip.loadAsync(localInput);
+  performanceTimings.zipLoadMs = performance.now() - stageStartedAt;
 
-  // ── 1. Parse original 3MF into project object ─────────────────────────────
-  const sourceProject = await parseProject(zip);
-
-  sourceProject.options = {
+  const resolvedOptions = {
     printProfileMode: 'preserve',
     forcedProfileId: '0.20mm-standard',
     filamentPresetMode: 'preserve',
@@ -70,53 +73,141 @@ async function convertToU1(inputBuffer, opts = {}) {
     forceBrimOff: true,
     autoFixOrganicVariableLayer: true,
     debugReport: true,
+    deepDebugReport: false,
     smartProcessMerge: true,
     strictProcessMerge: false,
 
-    ...(sourceProject.options || {}),
     ...(opts || {}),
     ...(opts.converterOptions || {}),
   };
 
+  // ── 1. Parse original 3MF into project object ─────────────────────────────
+  stageStartedAt = performance.now();
+
+  const sourceProject = await parseProject(
+    zip,
+    resolvedOptions
+  );
+
+  performanceTimings.projectParseMs =
+    performance.now() - stageStartedAt;
+
+  sourceProject.options = {
+    ...(sourceProject.options || {}),
+    ...resolvedOptions,
+  };
+
   // ── 2. Build converted U1 project settings ───────────────────────────────
+  stageStartedAt = performance.now();
   const project = await buildU1Project(sourceProject, opts);
+  performanceTimings.projectBuildMs = performance.now() - stageStartedAt;
 
   // ── 3. Rewrite 3MF metadata/model files ───────────────────────────────────
+  stageStartedAt = performance.now();
   const metadata = await rewriteU13mfMetadata(zip, project);
+  performanceTimings.metadataRewriteMs = performance.now() - stageStartedAt;
 
   project.metadata = {
     ...(project.metadata || {}),
     rewritten: metadata,
   };
 
+  // ── 4. Write output ZIP ──────────────────────────────────────────────────
+  const outZip = new JSZip();
+
+  let copiedFileCount = 0;
+  let rewrittenFileCount = 0;
+  let directoryCount = 0;
+  let skippedUnsafeFileCount = 0;
+
+  stageStartedAt = performance.now();
+
+  for (const name of Object.keys(zip.files)) {
+    const entry = zip.file(name);
+
+    if (!entry || entry.dir) {
+      if (entry?.dir) {
+        outZip.folder(name);
+        directoryCount++;
+      }
+
+      continue;
+    }
+
+    const safe = name.replace(/\\/g, '/').replace(/^\/+/, '');
+
+    if (safe.startsWith('..') || safe.includes('/../')) {
+      skippedUnsafeFileCount++;
+      continue;
+    }
+
+    if (name === 'Metadata/project_settings.config') {
+      outZip.file(name, project.u1.settingsBytes);
+      rewrittenFileCount++;
+    } else if (
+      name === 'Metadata/slice_info.config' &&
+      metadata.modifiedSliceInfo
+    ) {
+      outZip.file(name, metadata.modifiedSliceInfo);
+      rewrittenFileCount++;
+    } else if (
+      name === 'Metadata/model_settings.config' &&
+      metadata.modifiedModelSettings
+    ) {
+      outZip.file(name, metadata.modifiedModelSettings);
+      rewrittenFileCount++;
+    } else {
+      outZip.file(name, await entry.async('uint8array'));
+      copiedFileCount++;
+    }
+  }
+
+  performanceTimings.zipEntryCopyMs =
+    performance.now() - stageStartedAt;
+
+  stageStartedAt = performance.now();
+
+  const outputBytes = await outZip.generateAsync({
+    type: 'uint8array',
+    compression: 'DEFLATE',
+    compressionOptions: {
+      level: 4,
+    },
+  });
+  performanceTimings.zipGenerateMs =
+    performance.now() - stageStartedAt;
+
+  performanceTimings.totalMs =
+    performance.now() - conversionStartedAt;
+
   project.converter = {
     version: getConverterVersion(),
-    conversionMs: Math.round(performance.now() - conversionStartedAt),
+    conversionMs: Math.round(performanceTimings.totalMs),
+
+    performance: {
+      timings: Object.fromEntries(
+        Object.entries(performanceTimings).map(([key, value]) => [
+          key,
+          Math.round(value * 100) / 100,
+        ])
+      ),
+
+      inputBytes: localInput.byteLength,
+      outputBytes: outputBytes.byteLength,
+
+      zipEntryCount: Object.keys(zip.files).length,
+      copiedFileCount,
+      rewrittenFileCount,
+      directoryCount,
+      skippedUnsafeFileCount,
+
+      compression: 'DEFLATE',
+    },
   };
 
   if (project.options?.debugReport !== false) {
     logU1ProjectReport(project);
   }
 
-  // ── 4. Write output ZIP ──────────────────────────────────────────────────
-  const outZip = new JSZip();
-  for (const name of Object.keys(zip.files)) {
-    const entry = zip.file(name);
-    if (!entry || entry.dir) { if (entry?.dir) outZip.folder(name); continue; }
-
-    const safe = name.replace(/\\/g, '/').replace(/^\/+/, '');
-    if (safe.startsWith('..') || safe.includes('/../')) continue;
-
-    if (name === 'Metadata/project_settings.config') {
-      outZip.file(name, project.u1.settingsBytes);
-    } else if (name === 'Metadata/slice_info.config' && metadata.modifiedSliceInfo) {
-      outZip.file(name, metadata.modifiedSliceInfo);
-    } else if (name === 'Metadata/model_settings.config' && metadata.modifiedModelSettings) {
-      outZip.file(name, metadata.modifiedModelSettings);
-    } else {
-      outZip.file(name, await entry.async('uint8array'));
-    }
-  }
-
-  return outZip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+  return outputBytes;
 }

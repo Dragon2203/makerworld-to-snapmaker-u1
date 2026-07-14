@@ -336,16 +336,47 @@ function analyzeProjectFeatures(projectLike) {
   };
 }
 
-async function parseProject(zip) {
-  const entries = collect3mfEntries(zip);
-  const groups  = collect3mfGroups(entries);
+async function parseProject(zip, options = {}) {
+  const parserStartedAt = performance.now();
+  const parserTimings = {};
+
+  const measureAsync = async (key, fn) => {
+    const startedAt = performance.now();
+
+    try {
+      return await fn();
+    } finally {
+      parserTimings[key] = performance.now() - startedAt;
+    }
+  };
+
+  const measureSync = (key, fn) => {
+    const startedAt = performance.now();
+
+    try {
+      return fn();
+    } finally {
+      parserTimings[key] = performance.now() - startedAt;
+    }
+  };
+
+  const entries = measureSync(
+    'collectEntriesMs',
+    () => collect3mfEntries(zip)
+  );
+
+  const groups = measureSync(
+    'collectGroupsMs',
+    () => collect3mfGroups(entries)
+  );
 
   const files = {
     projectSettings: entries['Metadata/project_settings.config'] || null,
-    modelSettings:   entries['Metadata/model_settings.config'] || null,
-    sliceInfo:       entries['Metadata/slice_info.config'] || null,
-    model:           entries['3D/3dmodel.model'] || null,
-    layerHeightsProfile: entries['Metadata/layer_heights_profile.txt'] || null,
+    modelSettings: entries['Metadata/model_settings.config'] || null,
+    sliceInfo: entries['Metadata/slice_info.config'] || null,
+    model: entries['3D/3dmodel.model'] || null,
+    layerHeightsProfile:
+      entries['Metadata/layer_heights_profile.txt'] || null,
 
     thumbnails: groups.thumbnails,
     relationships: groups.relationships,
@@ -354,17 +385,70 @@ async function parseProject(zip) {
     other: groups.other,
   };
 
-  const projectSettings = await parseProjectSettings(files);
-  const sliceInfo       = await parseSliceInfo(files);
-  const modelSettings   = await parseModelSettings(files);
-  const model           = await parse3DModel(files);
-  const layerHeightsProfile = await parseLayerHeightsProfile(files);
-  const linkedObjects   = linkModelSettingsTo3DModel(model, modelSettings);
-  const modelAnalysis   = analyzeParsedProjectModel(model, linkedObjects);
+  const projectSettings = await measureAsync(
+    'projectSettingsMs',
+    () => parseProjectSettings(files)
+  );
 
-  const bambuDiagnostics = await parseBambu3mfDiagnostics({
-    files,
-  });
+  const sliceInfo = await measureAsync(
+    'sliceInfoMs',
+    () => parseSliceInfo(files)
+  );
+
+  const modelSettings = await measureAsync(
+    'modelSettingsMs',
+    () => parseModelSettings(files)
+  );
+
+  const model = await measureAsync(
+    'mainModelMs',
+    () => parse3DModel(files)
+  );
+
+  const layerHeightsProfile = await measureAsync(
+    'layerHeightsProfileMs',
+    () => parseLayerHeightsProfile(files)
+  );
+
+  const linkedObjects = measureSync(
+    'linkObjectsMs',
+    () => linkModelSettingsTo3DModel(model, modelSettings)
+  );
+
+  const modelAnalysis = measureSync(
+    'modelAnalysisMs',
+    () => analyzeParsedProjectModel(model, linkedObjects)
+  );
+
+  let bambuDiagnostics = {
+    files: [],
+
+    summary: {
+      metadataFiles: [],
+      relationshipFiles: [],
+      modelFiles: [],
+      filesWithNamespaces: [],
+      filesWithBambuAttributes: [],
+      xmlFiles: [],
+      jsonFiles: [],
+    },
+
+    skipped: true,
+    reason: 'Deep debug report is disabled.',
+  };
+
+  if (options.deepDebugReport === true) {
+    bambuDiagnostics = await measureAsync(
+      'bambuDiagnosticsMs',
+      () => parseBambu3mfDiagnostics({
+        files,
+      })
+    );
+
+    bambuDiagnostics.skipped = false;
+  } else {
+    parserTimings.bambuDiagnosticsMs = 0;
+  }
 
   const parserWarnings = [];
 
@@ -382,27 +466,79 @@ async function parseProject(zip) {
     parserWarnings.push('3D model contains no resource objects.');
   }
 
+  const filamentStartedAt = performance.now();
+
   let sourceFilaments = sliceInfo.filaments;
 
   if (!sourceFilaments.length) {
-    sourceFilaments = parseFilamentsFromProjectSettings(projectSettings.settingsStr);
+    sourceFilaments = parseFilamentsFromProjectSettings(
+      projectSettings.settingsStr
+    );
   }
 
-  const featureAnalysis = analyzeProjectFeatures({
-    model,
-    modelAnalysis,
-    projectSettings,
-    modelSettings,
-    bambuDiagnostics,
-    sourceFilaments,
-    layerHeightsProfile,
-  });
+  parserTimings.sourceFilamentsMs =
+    performance.now() - filamentStartedAt;
+
+  const featureAnalysis = measureSync(
+    'featureAnalysisMs',
+    () => analyzeProjectFeatures({
+      model,
+      modelAnalysis,
+      projectSettings,
+      modelSettings,
+      bambuDiagnostics,
+      sourceFilaments,
+      layerHeightsProfile,
+    })
+  );
+
+  const bambuFiles = bambuDiagnostics.files || [];
+
+  const bambuStatistics = {
+    candidateFiles:
+      groups.metadata.length +
+      groups.relationships.length +
+      groups.models.length,
+
+    parsedFiles: bambuFiles.length,
+
+    textLikeFiles:
+      bambuFiles.filter(file => file.textLike === true).length,
+
+    xmlFiles:
+      bambuFiles.filter(file => file.looksXml === true).length,
+
+    jsonFiles:
+      bambuFiles.filter(file => file.looksJson === true).length,
+
+    textCharacters:
+      bambuFiles.reduce(
+        (sum, file) => sum + (Number(file.size) || 0),
+        0
+      ),
+
+    filesWithPaint:
+      bambuFiles.filter(
+        file => file.paintColorAnalysis?.paintedTriangleCount > 0
+      ).length,
+
+    filesWithInterestingAttributes:
+      bambuFiles.filter(
+        file => file.interestingAttributes?.length > 0
+      ).length,
+  };
+
+  const assembleStartedAt = performance.now();
 
   const project = {
     zip,
     entries,
     groups,
     files,
+
+    options: {
+      ...(options || {}),
+    },
 
     original: {
       settings: projectSettings.settings,
@@ -436,6 +572,11 @@ async function parseProject(zip) {
       bambu: bambuDiagnostics,
       features: featureAnalysis,
       layerHeightsProfile,
+
+      parserPerformance: {
+        timings: parserTimings,
+        bambu: bambuStatistics,
+      },
     },
 
     filaments: {
@@ -475,6 +616,20 @@ async function parseProject(zip) {
       relationshipCount: groups.relationships.length,
     },
   };
+
+  parserTimings.assembleProjectMs =
+    performance.now() - assembleStartedAt;
+
+  parserTimings.totalMs =
+    performance.now() - parserStartedAt;
+
+  project.analysis.parserPerformance.timings =
+    Object.fromEntries(
+      Object.entries(parserTimings).map(([key, value]) => [
+        key,
+        Math.round(value * 100) / 100,
+      ])
+    );
 
   return project;
 }

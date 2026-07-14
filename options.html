@@ -200,8 +200,18 @@
   </div>
 
   <div class="option-row">
-    <label><input type="checkbox" id="deepDebugReport"> <span>Show reverse-engineering diagnostics</span></label>
-    <p class="hint">Adds detailed Bambu metadata, XML, paint, process and filament diagnostics to the report.</p>
+    <label>
+      <input type="checkbox" id="deepDebugReport">
+      <span>Show reverse-engineering diagnostics</span>
+    </label>
+
+    <p class="hint">
+      Adds detailed Bambu metadata, XML, paint, process and filament diagnostics to the report.
+    </p>
+
+    <p class="hint">
+      <strong>Note:</strong> Enabling this option performs a full reverse-engineering analysis of the 3MF project and can significantly increase conversion time, especially for large or complex models.
+    </p>
   </div>
 </section>
 

@@ -127,7 +127,7 @@ Browser-specific packages are generated in the `dist` directory.
 
 ### Chrome and Chromium-based browsers
 
-1. Download `makerworld-to-snapmaker-u1-chrome-v1.1.1.zip` from the latest GitHub release.
+1. Download `makerworld-to-snapmaker-u1-chrome-vX.X.X.zip` from the latest GitHub release.
 
 2. Extract the ZIP archive.
 
@@ -159,7 +159,7 @@ Your existing converter settings and imported custom printer profiles are stored
 
 ### Firefox
 
-1. Download `makerworld-to-snapmaker-u1-firefox-v1.1.1.zip` from the latest GitHub release.
+1. Download `makerworld-to-snapmaker-u1-firefox-vX.X.X.zip` from the latest GitHub release.
 2. Extract the ZIP archive.
 3. Open `about:debugging`.
 4. Select **This Firefox**.
@@ -236,9 +236,9 @@ dist/
 ├── chrome/
 ├── firefox/
 ├── source/
-├── makerworld-to-snapmaker-u1-chrome-v1.1.1.zip
-├── makerworld-to-snapmaker-u1-firefox-v1.1.1.zip
-└── makerworld-to-snapmaker-u1-source-v1.1.1.zip
+├── makerworld-to-snapmaker-u1-chrome-vX.X.X.zip
+├── makerworld-to-snapmaker-u1-firefox-vX.X.X.zip
+└── makerworld-to-snapmaker-u1-source-vX.X.X.zip
 ```
 
 The `dist` directory is generated locally and is excluded from Git.
