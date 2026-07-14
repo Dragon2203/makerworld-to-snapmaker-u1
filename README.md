@@ -127,7 +127,7 @@ Browser-specific packages are generated in the `dist` directory.
 
 ### Chrome and Chromium-based browsers
 
-1. Download `makerworld-to-snapmaker-u1-chrome-v1.1.0.zip` from the latest GitHub release.
+1. Download `makerworld-to-snapmaker-u1-chrome-v1.1.1.zip` from the latest GitHub release.
 
 2. Extract the ZIP archive.
 
@@ -145,9 +145,21 @@ Browser-specific packages are generated in the `dist` directory.
 
 The extension can also be loaded directly from the repository source folder in Chrome or another Chromium-based browser.
 
+### Updating (Chrome / Chromium)
+
+When a new version is released:
+
+1. Download the latest Chrome package from the GitHub Releases page.
+2. Extract the ZIP archive.
+3. Replace the existing extension files in your folder with the new version.
+4. Open your browser's extension management page (`chrome://extensions`, `edge://extensions`, `brave://extensions`, etc.).
+5. Click **Reload** for the MakerWorld to Snapmaker U1 extension. If the browser was closed after replacing the files, reloading the extension is usually not necessary.
+
+Your existing converter settings and imported custom printer profiles are stored in the browser and will be preserved during updates.
+
 ### Firefox
 
-1. Download `makerworld-to-snapmaker-u1-firefox-v1.1.0.zip` from the latest GitHub release.
+1. Download `makerworld-to-snapmaker-u1-firefox-v1.1.1.zip` from the latest GitHub release.
 2. Extract the ZIP archive.
 3. Open `about:debugging`.
 4. Select **This Firefox**.
@@ -224,9 +236,9 @@ dist/
 ├── chrome/
 ├── firefox/
 ├── source/
-├── makerworld-to-snapmaker-u1-chrome-v1.1.0.zip
-├── makerworld-to-snapmaker-u1-firefox-v1.1.0.zip
-└── makerworld-to-snapmaker-u1-source-v1.1.0.zip
+├── makerworld-to-snapmaker-u1-chrome-v1.1.1.zip
+├── makerworld-to-snapmaker-u1-firefox-v1.1.1.zip
+└── makerworld-to-snapmaker-u1-source-v1.1.1.zip
 ```
 
 The `dist` directory is generated locally and is excluded from Git.

@@ -37,7 +37,7 @@ New-Item $chromeDir -ItemType Directory -Force | Out-Null
 New-Item $firefoxDir -ItemType Directory -Force | Out-Null
 New-Item $sourceDir -ItemType Directory -Force | Out-Null
 
-# Runtime files shared by Chrome and Firefox.
+# Files shared by the generated Chrome and Firefox packages.
 $sharedFiles = @(
     'background.js',
     'content.js',
@@ -56,7 +56,14 @@ $sharedFiles = @(
     'u1_project_builder.js',
     'u1_project_merge.js',
     'u1_project_parser.js',
-    'u1_project_report.js'
+    'u1_project_report.js',
+
+    'README.md',
+    'CHANGELOG.md',
+    'PRIVACY.md',
+    'THIRD_PARTY_NOTICES.md',
+    'LICENSE',
+    'LICENSE-POLYFORM'
 )
 
 $sharedDirectories = @(

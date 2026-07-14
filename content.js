@@ -168,9 +168,12 @@ function createButtonIconSvg(state) {
     .u1-btn {
       position: relative;
       overflow: hidden;
-      display: inline-flex !important;
-      align-items: center;
-      justify-content: center;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      width: 100%;
+      margin: 0;
+      padding: 0;
     }
     .convert-button__progress {
       position: absolute; inset: 0; z-index: 1; pointer-events: none;
@@ -180,8 +183,13 @@ function createButtonIconSvg(state) {
         rgba(255,255,255,.22) 50%, rgba(255,255,255,.06) 75%, transparent 100%);
     }
     .convert-button__content {
-      position: relative; z-index: 2;
-      display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      width: 100%;
       white-space: nowrap;
     }
     .convert-button__icon {
@@ -578,35 +586,51 @@ function createButtonIconSvg(state) {
     _bypassInterceptor = false;
 
     const item = await poll(findVisibleDownloadItem, 5000);
-    if (!item) throw new Error('Download 3MF option not found — select a print profile first');
+    if (!item) {
+      throw new Error('Could not find the 3MF download option');
+    }
     console.log('[U1 Extension] clicking:', item.textContent.trim().slice(0, 40));
     item.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
   }
 
   function findVisibleDownloadItem() {
-    // Match English + German MakerWorld labels:
-    // "Download 3MF" / "3MF herunterladen"
+    // "3MF" is language-independent, unlike labels such as
+    // "Download", "herunterladen", "scaricare" or "télécharger".
     const normalize = t => (t || '').trim().replace(/\s+/g, ' ');
+
     const isDownload3mf = t => {
       t = normalize(t);
+
       return (
-        /^download\s+3mf/i.test(t) ||
-        /^3mf\s+herunterladen/i.test(t)
-      ) && t.length < 60;
+        /\b3mf\b/i.test(t) &&
+        t.length < 60
+      );
     };
 
-    for (const el of document.querySelectorAll('li, button, a, div, span, [role="menuitem"], [role="option"]')) {
+    for (const el of document.querySelectorAll(
+      'li, button, a, div, span, [role="menuitem"], [role="option"]'
+    )) {
       if (!isVisible(el)) continue;
       if (isDownload3mf(el.textContent)) return el;
     }
 
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT
+    );
+
     let node;
+
     while ((node = walker.nextNode())) {
       if (!isDownload3mf(node.textContent)) continue;
-      const p = node.parentElement;
-      if (p && isVisible(p)) return p;
+
+      const parent = node.parentElement;
+
+      if (parent && isVisible(parent)) {
+        return parent;
+      }
     }
+
     return null;
   }
 

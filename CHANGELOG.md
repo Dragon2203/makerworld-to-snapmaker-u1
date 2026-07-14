@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
+## [1.1.1] - 2026-07-14
+
+### Fixed
+
+- Fixed 3MF download detection on non-English MakerWorld languages.
+- Improved alignment of the conversion button content and loading icon.
+- Replaced the misleading "select a print profile first" error with a more accurate 3MF download option error.
+
+### Build
+
+- Added README, changelog, license and third-party notice files to the generated browser packages.
+
+### Documentation
+
+- Added Chrome/Chromium update instructions to the README.
+
 ---
 
 ## [1.1.0] - 2026-07-12
