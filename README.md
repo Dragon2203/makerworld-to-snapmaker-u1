@@ -159,16 +159,16 @@ Your existing converter settings and imported custom printer profiles are stored
 
 ### Firefox
 
-1. Download `makerworld-to-snapmaker-u1-firefox-vX.X.X.zip` from the latest GitHub release.
-2. Extract the ZIP archive.
-3. Open `about:debugging`.
-4. Select **This Firefox**.
-5. Click **Load Temporary Add-on**.
-6. Select the extracted `manifest.json`.
+Install directly from Mozilla Add-ons:
 
-A temporarily loaded Firefox extension remains installed until Firefox is restarted.
+[MakerWorld to Snapmaker U1 on Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/makerworld-to-snapmaker-u1/)
 
-The extension has been submitted to the Firefox Add-ons store and will be available for permanent installation after Mozilla's review has been completed.
+1. Click **Add to Firefox**.
+2. Confirm the requested permissions.
+
+Future updates are installed automatically through the Firefox Add-ons store.
+
+For development or temporary testing, the Firefox package can still be downloaded from the latest GitHub release and loaded temporarily through `about:debugging`.
 
 ---
 
@@ -180,7 +180,7 @@ The extension has been submitted to the Firefox Add-ons store and will be availa
 | Microsoft Edge                | ✅ Supported through the Chromium package |
 | Brave                         | ✅ Supported through the Chromium package |
 | Other Chromium-based browsers | ✅ Expected to work                       |
-| Mozilla Firefox               | ✅ Supported                              |
+| Mozilla Firefox               | ✅ Supported (Mozilla Add-ons)            |
 | Safari                        | ❌ Not supported                          |
 
 ---
