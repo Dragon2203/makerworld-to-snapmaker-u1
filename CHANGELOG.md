@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
 
+## [1.3.0] - 2026-07-18
+
+### Added
+
+- Added automatic positioning correction for multi-plate MakerWorld projects.
+- Added automatic compensation for differences between the source printer and Snapmaker U1 build-plate centers and plate-grid spacing.
+- Added multi-plate diagnostics to the converter report, including detected grid dimensions, adjusted and skipped plates, unresolved instances, center offset, grid difference and maximum movement.
+- Added a converter option for enabling or disabling multi-plate positioning correction.
+
+### Improved
+
+- Improved preservation of filament-specific project settings for preserved source filaments.
+- Improved handling of Bambu filament setting arrays that contain paired current and default values.
+- Improved safety of multi-plate conversion by validating every instance before changing a plate.
+- Multi-plate positioning now leaves an entire plate unchanged if any instance cannot be linked or positioned safely.
+- Single-plate projects remain unchanged by the multi-plate positioning feature.
+
+### Fixed
+
+- Fixed **Maximum Volumetric Speed** and other per-filament settings being read from the wrong array position in some MakerWorld projects.
+- Fixed preserved project filaments potentially receiving incorrect or unrelated filament values in Snapmaker Orca.
+- Fixed objects from multi-plate MakerWorld projects appearing on incorrect plate positions after conversion to the Snapmaker U1 build-plate layout.
+
+---
+
 ## [1.2.0] - 2026-07-14
 
 ### Improved

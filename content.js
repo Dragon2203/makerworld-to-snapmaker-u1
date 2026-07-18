@@ -37,6 +37,7 @@ function createButtonIconSvg(state) {
     forceExcludeObject:    true,
     forceBrimOff:          true,
     autoFixOrganicVariableLayer: true,
+    fixMultiPlatePositioning: true,
     debugReport:           true,
     deepDebugReport:       false,
     smartProcessMerge:    true,

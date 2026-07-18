@@ -8,6 +8,7 @@ const DEFAULTS = {
   forceExcludeObject:    true,
   forceBrimOff:          true,
   autoFixOrganicVariableLayer: true,
+  fixMultiPlatePositioning: true,
   debugReport:           true,
   deepDebugReport:       false,
   smartProcessMerge:    true,
@@ -307,6 +308,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     forceExcludeObject:    document.getElementById('forceExcludeObject')?.checked ?? true,
     forceBrimOff:          document.getElementById('forceBrimOff')?.checked ?? true,
     autoFixOrganicVariableLayer: document.getElementById('autoFixOrganicVariableLayer')?.checked ?? true,
+    fixMultiPlatePositioning: document.getElementById('fixMultiPlatePositioning')?.checked ?? true,
     debugReport:           document.getElementById('debugReport')?.checked ?? true,
     deepDebugReport:       document.getElementById('deepDebugReport')?.checked ?? false,
     smartProcessMerge:    document.getElementById('smartProcessMerge')?.checked ?? true,
@@ -359,7 +361,12 @@ document.getElementById('printProfileModeForce')?.addEventListener('change', upd
     document.getElementById('forceBrimOff').checked = s.forceBrimOff;
   }
   if (document.getElementById('autoFixOrganicVariableLayer')) {
-    document.getElementById('autoFixOrganicVariableLayer').checked = s.autoFixOrganicVariableLayer;
+    document.getElementById('autoFixOrganicVariableLayer').checked =
+      s.autoFixOrganicVariableLayer;
+  }
+  if (document.getElementById('fixMultiPlatePositioning')) {
+    document.getElementById('fixMultiPlatePositioning').checked =
+      s.fixMultiPlatePositioning;
   }
   if (document.getElementById('debugReport')) {
     document.getElementById('debugReport').checked = s.debugReport;

@@ -63,6 +63,10 @@ The goal is simple:
 
 ✔ Automatically fixes common Snapmaker Orca compatibility issues
 
+✔ Automatically corrects plate positions in multi-plate MakerWorld projects
+
+✔ Preserves source filament settings such as Maximum Volumetric Speed
+
 ✔ No uploads, external converters or additional software required
 
 ---
@@ -88,6 +92,33 @@ Several common compatibility issues are handled automatically.
 - Automatically switches **Tree Support** to **Hybrid** whenever Adaptive Layer Height is detected.
 
 These adjustments match the workflow many users perform manually after importing MakerWorld projects.
+
+---
+
+### Multi-plate project support
+
+MakerWorld projects containing multiple build plates are automatically adjusted to the Snapmaker U1 plate layout.
+
+The converter accounts for differences between the source printer's build-plate center and plate-grid spacing while preserving:
+
+- The original arrangement of objects on each plate
+- Object rotation and scale
+- Object height and Z position
+- The original separation between individual plates
+
+Single-plate projects are left unchanged.
+
+If a plate cannot be adjusted safely, the complete plate remains unchanged instead of moving only some of its objects.
+
+---
+
+### Filament setting preservation
+
+Filament-specific project settings are preserved for each source filament whenever possible.
+
+This includes settings such as **Maximum Volumetric Speed**, temperatures, cooling settings and other filament overrides stored inside the MakerWorld project.
+
+This prevents preserved project filaments from silently falling back to unrelated Snapmaker Orca system values.
 
 ---
 

@@ -9,7 +9,12 @@ function logU1ProjectReport(project) {
   const options = project.options || {};
   const model = project.analysis?.model || {};
   const compatibility = project.compatibility || {};
-  const deepDebugReport = options.deepDebugReport === true;
+
+  const multiPlatePositioning =
+    project.analysis?.multiPlatePositioning || null;
+
+  const deepDebugReport =
+    options.deepDebugReport === true;
   const filamentSlotCount = Math.max(
     TARGET_FILAMENTS,
     project.filaments?.mapped?.ids?.length || 0,
@@ -61,15 +66,21 @@ function logU1ProjectReport(project) {
     sourceFilaments: project.filaments?.source?.length || 0,
     finalFilamentSlots: filamentSlotCount,
 
+    multiPlateDetected: multiPlatePositioning?.detected ?? false,
+    multiPlatePositioningApplied: multiPlatePositioning?.applied ?? false,
+
     compatibilityActions: compatibility.actions?.length || 0,
     compatibilityWarnings: compatibility.warnings?.length || 0,
   });
 
   logU1PerformanceReport(
     project.converter?.performance,
+
     deepDebugReport
       ? project.analysis?.parserPerformance
-      : null
+      : null,
+
+    multiPlatePositioning
   );
 
   console.groupCollapsed('converter options');
@@ -183,10 +194,155 @@ function logU1ProjectReport(project) {
 
   console.groupEnd();
 
+  console.groupCollapsed('multi-plate positioning');
+
+  if (!multiPlatePositioning) {
+    console.log('summary:', {
+      available: false,
+      reason: 'No multi-plate positioning analysis was recorded.',
+    });
+  } else {
+    console.log('summary:', {
+      enabled:
+        multiPlatePositioning.enabled,
+
+      detected:
+        multiPlatePositioning.detected,
+
+      applied:
+        multiPlatePositioning.applied,
+
+      reason:
+        multiPlatePositioning.reason || null,
+
+      plateCount:
+        multiPlatePositioning.plateCount ?? null,
+
+      adjustedPlates:
+        multiPlatePositioning.adjustedPlateCount ?? 0,
+
+      adjustedInstances:
+        multiPlatePositioning.adjustedInstanceCount ?? 0,
+
+      unresolvedInstances:
+        multiPlatePositioning.unresolvedInstanceCount ?? 0,
+
+      skippedPlates:
+        multiPlatePositioning.skippedPlateCount ?? 0,
+
+      skippedInstances:
+        multiPlatePositioning.skippedInstanceCount ?? 0,
+
+      gridFactor:
+        multiPlatePositioning.gridFactor ?? null,
+
+      sourcePrinter:
+        multiPlatePositioning.source?.printerModel || null,
+
+      sourceBed:
+        multiPlatePositioning.source
+          ? `${multiPlatePositioning.source.width} × ${multiPlatePositioning.source.height} mm`
+          : null,
+
+      sourceGridStep:
+        multiPlatePositioning.source
+          ? `${multiPlatePositioning.source.gridStepX} × ${multiPlatePositioning.source.gridStepY} mm`
+          : null,
+
+      targetPrinter:
+        multiPlatePositioning.target?.printerModel || null,
+
+      targetBed:
+        multiPlatePositioning.target
+          ? `${multiPlatePositioning.target.width} × ${multiPlatePositioning.target.height} mm`
+          : null,
+
+      targetGridStep:
+        multiPlatePositioning.target
+          ? `${multiPlatePositioning.target.gridStepX} × ${multiPlatePositioning.target.gridStepY} mm`
+          : null,
+
+      centerOffset:
+        multiPlatePositioning.centerOffset
+          ? {
+              x: `${multiPlatePositioning.centerOffset.x} mm`,
+              y: `${multiPlatePositioning.centerOffset.y} mm`,
+            }
+          : null,
+
+      gridDifference:
+        multiPlatePositioning.gridDifference
+          ? {
+              x: `${multiPlatePositioning.gridDifference.x} mm`,
+              y: `${multiPlatePositioning.gridDifference.y} mm`,
+            }
+          : null,
+
+      detectedGrid:
+        multiPlatePositioning.grid
+          ? {
+              columns:
+                multiPlatePositioning.grid.minColumn !== null &&
+                multiPlatePositioning.grid.maxColumn !== null
+                  ? `${multiPlatePositioning.grid.minColumn} → ${multiPlatePositioning.grid.maxColumn}`
+                  : null,
+
+              rows:
+                multiPlatePositioning.grid.minRow !== null &&
+                multiPlatePositioning.grid.maxRow !== null
+                  ? `${multiPlatePositioning.grid.minRow} → ${multiPlatePositioning.grid.maxRow}`
+                  : null,
+
+              cells:
+                multiPlatePositioning.grid.detectedCells ?? 0,
+            }
+          : null,
+
+      maximumMovement:
+        multiPlatePositioning.movement
+          ? {
+              x:
+                `${multiPlatePositioning.movement.maxAbsDeltaX || 0} mm`,
+
+              y:
+                `${multiPlatePositioning.movement.maxAbsDeltaY || 0} mm`,
+            }
+          : null,
+
+      duration:
+        Number.isFinite(multiPlatePositioning.durationMs)
+          ? `${multiPlatePositioning.durationMs} ms`
+          : null,
+    });
+
+    if (multiPlatePositioning.problemPlateIds?.length) {
+      console.log(
+        'problem plates:',
+        multiPlatePositioning.problemPlateIds
+      );
+    }
+
+    if (multiPlatePositioning.warnings?.length) {
+      console.log(
+        'warnings:',
+        multiPlatePositioning.warnings
+      );
+    }
+  }
+
+  console.groupEnd();
+
   console.groupCollapsed('automatic compatibility fixes');
 
-  console.log('applied actions:', compatibility.actions || []);
-  console.log('warnings:', compatibility.warnings || []);
+  console.log(
+    'applied actions:',
+    compatibility.actions || []
+  );
+
+  console.log(
+    'warnings:',
+    compatibility.warnings || []
+  );
 
   console.groupEnd();
 
@@ -199,7 +355,8 @@ function logU1ProjectReport(project) {
 
 function logU1PerformanceReport(
   performanceData,
-  parserPerformance
+  parserPerformance,
+  multiPlatePositioning = null
 ) {
   if (!performanceData) return;
 
@@ -243,6 +400,10 @@ function logU1PerformanceReport(
     {
       stage: 'Metadata rewrite',
       duration: formatMs(timings.metadataRewriteMs),
+    },
+    {
+      stage: 'Multi-plate positioning',
+      duration: formatMs(multiPlatePositioning?.durationMs),
     },
     {
       stage: 'Copy ZIP entries',

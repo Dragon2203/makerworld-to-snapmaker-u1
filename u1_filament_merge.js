@@ -141,18 +141,26 @@ function isSourceSlotFilamentArray(key, value, realFilamentCount) {
   if (ALWAYS_SLOT_FILAMENT_KEYS.has(key)) return true;
 
   // Normal case:
-  // Slot-based filament arrays have the same length as the real source
-  // filament count.
+  // One value per real filament slot.
   if (value.length === realFilamentCount) return true;
+
+  // Bambu current/default pair format:
+  // Some filament arrays are stored flat as:
+  //
+  // [slot1_current, slot1_default, slot2_current, slot2_default, ...]
+  //
+  // Example with 12 filaments:
+  // filament_max_volumetric_speed has 24 entries.
+  if (
+    realFilamentCount > 0 &&
+    value.length === realFilamentCount * 2
+  ) {
+    return true;
+  }
 
   // Bambu edge case:
   // Some single-filament projects store detailed filament_* arrays with
   // two entries even though only slot 1 is actually visible/used.
-  // These arrays must still be treated as source filament settings so
-  // slot 1 can become a proper Project-Inside filament in SnOrca.
-  // Dummy slots are still protected because copyOriginalSlot() only reads
-  // existing source indexes and dummy slots are written later via
-  // writeGenericSlot().
   if (realFilamentCount === 1 && value.length === 2) return true;
 
   return false;
@@ -218,6 +226,27 @@ function applyFinalU1FilamentPass(
     Array.isArray(origSettings?.filament_type) ? origSettings.filament_type.length : 0,
     Array.isArray(sourceFilaments) ? sourceFilaments.length : 0
   );
+
+  function getSourceSlotArrayValue(settings, key, index, fallback = '') {
+    const value = settings?.[key];
+
+    if (!Array.isArray(value)) return fallback;
+
+    // Bambu flat current/default pair format:
+    // [slot1_current, slot1_default, slot2_current, slot2_default, ...]
+    if (
+      realFilamentCount > 0 &&
+      value.length === realFilamentCount * 2
+    ) {
+      const pairedIndex = index * 2;
+
+      if (value[pairedIndex] === undefined) return fallback;
+      return bambuCurrentValue(value[pairedIndex]);
+    }
+
+    if (value[index] === undefined) return fallback;
+    return bambuCurrentValue(value[index]);
+  }
 
   targetFilamentCount = Math.max(
     TARGET_FILAMENTS,
@@ -285,20 +314,31 @@ function applyFinalU1FilamentPass(
   }
 
   function sourceArrayValue(settings, key, index, fallback = '') {
-    const value = settings?.[key];
-    if (!Array.isArray(value)) return fallback;
-    if (value[index] === undefined) return fallback;
-    return bambuCurrentValue(value[index]);
+    return getSourceSlotArrayValue(
+      settings,
+      key,
+      index,
+      fallback
+    );
   }
 
-   function copyOriginalSlot(index) {
+  function copyOriginalSlot(index) {
     for (const key of filamentKeys) {
       const value = origSettings?.[key];
+
       if (!Array.isArray(value)) continue;
       if (!sourceSlotFilamentKeys.has(key)) continue;
-      if (value[index] === undefined) continue;
 
-      ensureArray(key)[index] = bambuCurrentValue(value[index]);
+      const slotValue = getSourceSlotArrayValue(
+        origSettings,
+        key,
+        index,
+        undefined
+      );
+
+      if (slotValue === undefined) continue;
+
+      ensureArray(key)[index] = slotValue;
     }
   }
 

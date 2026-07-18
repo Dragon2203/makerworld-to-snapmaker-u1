@@ -72,6 +72,7 @@ async function convertToU1(inputBuffer, opts = {}) {
     forceExcludeObject: true,
     forceBrimOff: true,
     autoFixOrganicVariableLayer: true,
+    fixMultiPlatePositioning: true,
     debugReport: true,
     deepDebugReport: false,
     smartProcessMerge: true,
@@ -154,10 +155,28 @@ async function convertToU1(inputBuffer, opts = {}) {
       name === 'Metadata/model_settings.config' &&
       metadata.modifiedModelSettings
     ) {
-      outZip.file(name, metadata.modifiedModelSettings);
+      outZip.file(
+        name,
+        metadata.modifiedModelSettings
+      );
+
+      rewrittenFileCount++;
+    } else if (
+      name === '3D/3dmodel.model' &&
+      metadata.modified3DModel
+    ) {
+      outZip.file(
+        name,
+        metadata.modified3DModel
+      );
+
       rewrittenFileCount++;
     } else {
-      outZip.file(name, await entry.async('uint8array'));
+      outZip.file(
+        name,
+        await entry.async('uint8array')
+      );
+
       copiedFileCount++;
     }
   }
