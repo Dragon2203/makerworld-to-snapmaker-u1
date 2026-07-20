@@ -10,6 +10,18 @@ function logU1ProjectReport(project) {
   const model = project.analysis?.model || {};
   const compatibility = project.compatibility || {};
 
+  const printerProfile =
+    project.analysis?.customPrinterProfile || null;
+
+  const orcaCompatibilityEnabled =
+    options.orcaCompatibility === true ||
+    printerProfile?.compatibilityMode === 'orca';
+
+  const targetSlicer =
+    orcaCompatibilityEnabled
+      ? 'OrcaSlicer'
+      : 'Snapmaker Orca';
+
   const multiPlatePositioning =
     project.analysis?.multiPlatePositioning || null;
 
@@ -65,6 +77,9 @@ function logU1ProjectReport(project) {
 
     sourceFilaments: project.filaments?.source?.length || 0,
     finalFilamentSlots: filamentSlotCount,
+
+    targetSlicer,
+    orcaCompatibility: orcaCompatibilityEnabled,
 
     multiPlateDetected: multiPlatePositioning?.detected ?? false,
     multiPlatePositioningApplied: multiPlatePositioning?.applied ?? false,
@@ -134,26 +149,204 @@ function logU1ProjectReport(project) {
 
   console.groupEnd();
 
-  console.groupCollapsed('custom printer profile');
+  console.groupCollapsed('printer profile');
 
-  const customPrinterProfile = project.analysis?.customPrinterProfile || null;
+  const requestedPrinterProfile =
+    printerProfile?.requested ||
+    U1_CUSTOM_PRINTER_STANDARD_ID;
 
-  console.log('summary:', customPrinterProfile ? {
-    mode: customPrinterProfile.mode || null,
-    requested: customPrinterProfile.requested || null,
-    enabled: customPrinterProfile.enabled,
-    missing: customPrinterProfile.missing || false,
-    selected: customPrinterProfile.selected || null,
-    inheritedFrom: customPrinterProfile.inheritedFrom || null,
-    overrideCount: customPrinterProfile.overrideCount || 0,
-    machineIndex: customPrinterProfile.machineIndex ?? null,
+  const standardPrinterProfileSelected =
+    requestedPrinterProfile ===
+    U1_CUSTOM_PRINTER_STANDARD_ID;
+
+  console.log('summary:', printerProfile ? {
+    targetSlicer,
+    mode:
+      standardPrinterProfileSelected
+        ? 'standard'
+        : 'custom',
+
+    requested:
+      requestedPrinterProfile,
+
+    selected:
+      printerProfile.selected ||
+      project.u1?.settings?.printer_settings_id ||
+      null,
+
+    inheritedFrom:
+      printerProfile.inheritedFrom || null,
+
+    customProfileApplied:
+      !standardPrinterProfileSelected &&
+      (printerProfile.overrideCount || 0) > 0,
+
+    customOverrideCount:
+      printerProfile.overrideCount || 0,
+
+    missing:
+      printerProfile.missing || false,
+
+    machineIndex:
+      printerProfile.machineIndex ?? null,
   } : null);
 
-  console.log('override keys:', customPrinterProfile?.overrideKeys || []);
-  console.log('applied:', customPrinterProfile?.applied || []);
-  console.log('skipped:', customPrinterProfile?.skipped || []);
+  console.log(
+    'custom override keys:',
+    printerProfile?.overrideKeys || []
+  );
+
+  console.log(
+    'custom overrides applied:',
+    printerProfile?.applied || []
+  );
+
+  console.log(
+    'skipped:',
+    printerProfile?.skipped || []
+  );
 
   console.groupEnd();
+
+  if (orcaCompatibilityEnabled) {
+    console.groupCollapsed('orca compatibility');
+
+    const finalSettings =
+      project.u1?.settings || {};
+
+    const targetExtruders =
+      printerProfile?.targetExtruderCount ??
+      finalSettings.printer_extruder_id?.length ??
+      null;
+
+    const customOverrideKeys =
+      printerProfile?.overrideKeys || [];
+
+    const printerDirtyKeys =
+      printerProfile?.printerDirtyKeys || [];
+
+    const printerDirtyKeySet =
+      new Set(printerDirtyKeys);
+
+    const customOverridesAlsoPrinterDirtyKeys =
+      customOverrideKeys.filter(key =>
+        printerDirtyKeySet.has(key)
+      );
+
+    const additionalCustomOverrideKeys =
+      customOverrideKeys.filter(key =>
+        !printerDirtyKeySet.has(key)
+      );
+
+    console.log('summary:', {
+      enabled: true,
+      targetSlicer: 'OrcaSlicer',
+
+      profileMode:
+        standardPrinterProfileSelected
+          ? 'standard'
+          : 'custom',
+
+      printerProfileType:
+        standardPrinterProfileSelected
+          ? 'Standard'
+          : 'Custom',
+
+      printerProfile:
+        finalSettings.printer_settings_id || null,
+
+      sourceFilaments:
+        project.filaments?.source?.length || 0,
+
+      projectFilamentCount:
+        printerProfile?.projectFilamentCount ?? null,
+
+      customProfileExtruders:
+        printerProfile?.customProfileExtruderCount ?? null,
+
+      targetExtruders,
+
+      machineIndex:
+        printerProfile?.machineIndex ?? null,
+
+      normalizedExtruderArrays:
+        printerProfile?.normalizedArrayCount || 0,
+
+      printerDirtyKeys:
+        printerProfile?.printerDirtyKeyCount ||
+        printerProfile?.printerDirtyKeys?.length ||
+        0,
+
+      customPrinterOverrides:
+        printerProfile?.overrideCount || 0,
+
+      customOverridesAlsoPrinterDirtyKeys:
+        customOverridesAlsoPrinterDirtyKeys.length,
+
+      additionalCustomOverrides:
+        additionalCustomOverrideKeys.length,
+
+      nozzleDiameterSlots:
+        Array.isArray(finalSettings.nozzle_diameter)
+          ? finalSettings.nozzle_diameter.length
+          : 0,
+
+      nozzleVolumeSlots:
+        Array.isArray(finalSettings.nozzle_volume)
+          ? finalSettings.nozzle_volume.length
+          : 0,
+
+      nozzleTypeSlots:
+        Array.isArray(finalSettings.nozzle_type)
+          ? finalSettings.nozzle_type.length
+          : 0,
+
+      retractionLengthSlots:
+        Array.isArray(finalSettings.retraction_length)
+          ? finalSettings.retraction_length.length
+          : 0,
+
+      printerExtruderIdSlots:
+        Array.isArray(finalSettings.printer_extruder_id)
+          ? finalSettings.printer_extruder_id.length
+          : 0,
+    });
+
+    console.log(
+      'normalized array keys:',
+      printerProfile?.normalizedArrayKeys || []
+    );
+
+    console.log(
+      'printer dirty keys:',
+      printerProfile?.printerDirtyKeys || []
+    );
+
+    if (
+      !standardPrinterProfileSelected &&
+      customOverrideKeys.length
+    ) {
+      console.log(
+        'selected custom Orca profile override keys:',
+        customOverrideKeys
+      );
+
+      console.log(
+        'custom overrides also used as printer dirty keys:',
+        customOverridesAlsoPrinterDirtyKeys
+      );
+
+      if (additionalCustomOverrideKeys.length) {
+        console.log(
+          'additional custom Orca override keys:',
+          additionalCustomOverrideKeys
+        );
+      }
+    }
+
+    console.groupEnd();
+  }
+
 
   console.groupCollapsed('print profile');
 
@@ -332,7 +525,7 @@ function logU1ProjectReport(project) {
 
   console.groupEnd();
 
-  console.groupCollapsed('automatic compatibility fixes');
+  console.groupCollapsed('automatic project adjustments');
 
   console.log(
     'applied actions:',

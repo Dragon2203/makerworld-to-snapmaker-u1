@@ -53,6 +53,11 @@
     margin-bottom: 0;
   }
 
+  details summary {
+    cursor: pointer;
+    user-select: none;
+  }
+  
   .option-row .hint {
     margin-top: 6px;
     margin-left: 23px;
@@ -86,48 +91,264 @@
     background: #1f1f1f;
     border: 1px solid #3a3a3a;
     border-radius: 4px;
-    padding: 3px 8px;
+    padding: 5px 8px;
     font-family: Consolas, "Courier New", monospace;
     color: #e8e8e8;
+
     width: fit-content;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    user-select: all;
   }
 
+  .profile-card.is-inactive { opacity: .5; }
+
+  .profile-card.is-inactive select,
+  .profile-card.is-inactive button,
+  .profile-card.is-inactive details {
+    pointer-events: none;
+  }
+
+  .profile-card-title {
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 10px;
+  }
+
+  .profile-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  dialog {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+
+    color: #e0e0e0;
+    background: #252525;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 20px;
+
+    width: calc(100% - 32px);
+    max-width: 480px;
+    max-height: calc(100% - 32px);
+    overflow-y: auto;
+  }
+
+  dialog::backdrop {
+    background: rgba(0, 0, 0, .65);
+  }
+
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+  }
+  
 </style>
 </head>
 <body>
 <h1>MakerWorld to Snapmaker U1 Settings</h1>
 
 <section>
-  <h2>Custom U1 Printer Profile</h2>
+  <h2>Printer Profiles</h2>
 
   <div class="option-row">
     <label>
-      <span style="min-width:160px">Printer profile</span>
-      <select id="customPrinterProfileId">
-        <option value="__standard_u1_printer_profile__">Standard U1 profile</option>
-      </select>
+      <input type="checkbox" id="orcaCompatibility">
+      <span>Orca Compatibility</span>
     </label>
-    <p class="hint">Optional custom Snapmaker Orca printer profile. Imported profiles are stored locally in this browser.</p>
-    <div class="profile-info" id="customPrinterProfileInfo" style="display:none"></div>
+
+    <p class="hint">
+      Enables the additional printer and extruder settings required when the
+      converted project is opened in regular OrcaSlicer. Leave this disabled
+      for the normal Snapmaker Orca conversion path.
+    </p>
+  </div>
+
+  <div id="printerProfileCards">
+    <div class="option-row profile-card" id="snorcaPrinterProfileCard">
+      <div class="profile-card-title">
+        Snapmaker Orca printer profile
+      </div>
+
+      <label>
+        <span style="min-width:160px">Printer profile</span>
+
+        <select id="customPrinterProfileId">
+          <option value="__standard_u1_printer_profile__">
+            Standard U1 profile
+          </option>
+        </select>
+      </label>
+
+      <p class="hint">
+        Used when Orca Compatibility is disabled.
+      </p>
+
+      <details style="margin-top:10px">
+        <summary>Custom changes</summary>
+
+        <div
+          class="profile-info"
+          id="customPrinterProfileInfo"
+          style="display:none"
+        ></div>
+      </details>
+
+      <div class="profile-actions">
+        <button
+          type="button"
+          class="btn-danger"
+          id="deleteCustomPrinterProfileBtn"
+        >
+          Delete selected custom profile
+        </button>
+      </div>
+    </div>
+
+    <div class="option-row profile-card" id="orcaPrinterProfileCard">
+      <div class="profile-card-title">
+        OrcaSlicer printer profile
+      </div>
+
+      <label>
+        <span style="min-width:160px">Printer profile</span>
+
+        <select id="orcaCustomPrinterProfileId">
+          <option value="__standard_u1_printer_profile__">
+            Standard U1 profile
+          </option>
+        </select>
+      </label>
+
+      <p class="hint">
+        Used only when Orca Compatibility is enabled.
+      </p>
+
+      <details style="margin-top:10px">
+        <summary>Custom changes</summary>
+
+        <div
+          class="profile-info"
+          id="orcaCustomPrinterProfileInfo"
+          style="display:none"
+        ></div>
+      </details>
+
+      <div class="profile-actions">
+        <button
+          type="button"
+          class="btn-danger"
+          id="deleteOrcaCustomPrinterProfileBtn"
+        >
+          Delete selected custom profile
+        </button>
+      </div>
+    </div>
   </div>
 
   <div class="option-row">
-    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center">
-      <button type="button" class="btn-ghost" id="importCustomPrinterProfileBtn">Import custom printer profile JSON</button>
-      <button type="button" class="btn-danger" id="deleteCustomPrinterProfileBtn">Delete selected custom profile</button>
-      <input type="file" id="customPrinterProfileFiles" accept=".json,application/json" multiple style="display:none">
+    <button
+      type="button"
+      class="btn-ghost"
+      id="importCustomPrinterProfileBtn"
+    >
+      Import custom printer profile JSON
+    </button>
+
+    <input
+      type="file"
+      id="customPrinterProfileFiles"
+      accept=".json,application/json"
+      multiple
+      style="display:none"
+    >
+
+    <p class="hint">
+      Import a custom printer profile JSON from the corresponding slicer
+      folder. After selecting the file, choose whether it belongs to
+      Snapmaker Orca or OrcaSlicer.
+    </p>
+
+    <div class="profile-info">
+      <div class="profile-info-row">
+        <strong>Snapmaker Orca</strong>
+
+        <div>
+          <code class="path-code">C:\Users\&lt;username&gt;\AppData\Roaming\Snapmaker_Orca\user\default\machine</code>
+        </div>
+      </div>
+
+      <div class="profile-info-row" style="margin-top:8px">
+        <strong>OrcaSlicer</strong>
+
+        <div>
+          <code class="path-code">C:\Users\&lt;username&gt;\AppData\Roaming\OrcaSlicer\user\default\machine</code>
+        </div>
+      </div>
     </div>
-    <p class="hint" id="customPrinterProfileHint">
-      Import the printer profile JSON exported from <strong>Snapmaker Orca</strong>,
-      or copy it from:
-      <code class="path-code">
-      C:\Users\&lt;username&gt;\AppData\Roaming\Snapmaker_Orca\user\default\machine
-      </code>
-      If you modify the printer profile later in Snapmaker Orca, simply import it again.
-      Existing profiles are updated automatically.
+
+    <p class="hint">
+      Imported profiles are stored locally in this browser. Snapmaker Orca
+      and OrcaSlicer profiles are managed separately. If you modify a printer profile
+      in the slicer, simply import it again. Existing profiles are updated automatically
     </p>
   </div>
 </section>
+
+<dialog id="printerProfileTargetDialog">
+  <h1 style="margin-bottom:12px">
+    Import printer profile
+  </h1>
+
+  <p class="hint" style="margin:0 0 14px">
+    Which slicer does this profile belong to?
+  </p>
+
+  <label>
+    <input
+      type="radio"
+      name="printerProfileTarget"
+      value="snorca"
+      checked
+    >
+    <span>Snapmaker Orca</span>
+  </label>
+
+  <label>
+    <input
+      type="radio"
+      name="printerProfileTarget"
+      value="orca"
+    >
+    <span>OrcaSlicer</span>
+  </label>
+
+  <div class="dialog-actions">
+    <button
+      type="button"
+      class="btn-ghost"
+      id="cancelPrinterProfileImportBtn"
+    >
+      Cancel
+    </button>
+
+    <button
+      type="button"
+      class="btn-primary"
+      id="confirmPrinterProfileImportBtn"
+    >
+      Import
+    </button>
+  </div>
+</dialog>
 
 <section>
   <h2>Print Profile Handling</h2>

@@ -69,6 +69,8 @@ The goal is simple:
 
 ✔ No uploads, external converters or additional software required
 
+✔ Supports custom Snapmaker Orca and OrcaSlicer printer profiles
+
 ---
 
 ## Features
@@ -142,7 +144,9 @@ The extension includes several optional settings to customize the conversion pro
 
 ### Custom U1 Printer Profiles
 
-Import your own Snapmaker Orca printer profile if you use customized machine settings.
+Import your own custom printer profiles from either Snapmaker Orca or regular OrcaSlicer.
+
+The converter stores both profile types separately and uses the corresponding profile depending on whether Orca Compatibility is enabled.
 
 Imported profiles are stored locally inside the browser and can be updated at any time by importing them again.
 
@@ -240,7 +244,7 @@ The extension performs the conversion itself. No external converter or upload se
 
 Yes.
 
-Custom Snapmaker Orca printer profiles can be imported directly from the Options page.
+Custom printer profiles from both Snapmaker Orca and OrcaSlicer can be imported directly from the Options page.
 
 ---
 
@@ -278,10 +282,11 @@ The `dist` directory is generated locally and is excluded from Git.
 
 ## Result
 
-The generated project opens as a normal Snapmaker Orca project and is ready for review before printing.
+The generated project opens as a normal Snapmaker Orca or Orca project and is ready for review before printing.
 
 ![Snapmaker Orca](screenshots/project.png)
 
+![Orca](screenshots/orca.png)
 ---
 
 ## Credits

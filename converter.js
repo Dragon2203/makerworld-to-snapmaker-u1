@@ -77,6 +77,7 @@ async function convertToU1(inputBuffer, opts = {}) {
     deepDebugReport: false,
     smartProcessMerge: true,
     strictProcessMerge: false,
+    orcaCompatibility: false,
 
     ...(opts || {}),
     ...(opts.converterOptions || {}),

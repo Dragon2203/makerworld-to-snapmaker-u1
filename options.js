@@ -4,6 +4,8 @@ const DEFAULTS = {
   printProfileMode:      'preserve',
   forcedProfileId:       '0.20mm-standard',
   customPrinterProfileId: U1_CUSTOM_PRINTER_STANDARD_ID,
+  orcaCustomPrinterProfileId: U1_CUSTOM_PRINTER_STANDARD_ID,
+  orcaCompatibility:    false,
   filamentPresetMode:    'preserve',
   forceExcludeObject:    true,
   forceBrimOff:          true,
@@ -16,6 +18,8 @@ const DEFAULTS = {
 };
 
 let customPrinterProfiles = {};
+let orcaCustomPrinterProfiles = {};
+let pendingPrinterProfileFiles = [];
 
 // ── Small storage helpers ─────────────────────────────────────────────────────
 
@@ -93,9 +97,15 @@ function updatePrintProfileUi() {
 async function loadCustomPrinterProfiles() {
   const stored = await getLocalStorage({
     [U1_CUSTOM_PRINTER_PROFILE_STORAGE_KEY]: {},
+    [U1_ORCA_CUSTOM_PRINTER_PROFILE_STORAGE_KEY]: {},
   });
 
-  customPrinterProfiles = stored[U1_CUSTOM_PRINTER_PROFILE_STORAGE_KEY] || {};
+  // Existing installations keep using the old key for Snapmaker Orca.
+  customPrinterProfiles =
+    stored[U1_CUSTOM_PRINTER_PROFILE_STORAGE_KEY] || {};
+
+  orcaCustomPrinterProfiles =
+    stored[U1_ORCA_CUSTOM_PRINTER_PROFILE_STORAGE_KEY] || {};
 }
 
 function formatCustomPrinterProfileDate(value) {
@@ -132,7 +142,6 @@ function createChangedSettingsDetails(changedSettings) {
   }
 
   const details = document.createElement('details');
-
   const summary = document.createElement('summary');
   summary.textContent =
     `${changedSettings.length} setting${changedSettings.length === 1 ? '' : 's'}`;
@@ -146,7 +155,6 @@ function createChangedSettingsDetails(changedSettings) {
     .forEach((key) => {
       const item = document.createElement('li');
       const code = document.createElement('code');
-
       code.textContent = String(key);
       item.appendChild(code);
       list.appendChild(item);
@@ -156,8 +164,8 @@ function createChangedSettingsDetails(changedSettings) {
   return details;
 }
 
-function renderCustomPrinterProfileInfo(profile) {
-  const info = document.getElementById('customPrinterProfileInfo');
+function renderCustomPrinterProfileInfo(profile, infoId) {
+  const info = document.getElementById(infoId);
   if (!info) return;
 
   info.replaceChildren();
@@ -175,32 +183,23 @@ function renderCustomPrinterProfileInfo(profile) {
       : Object.keys(profile.overrides || {});
 
   info.append(
-    createProfileInfoRow(
-      'Name',
-      profile.displayName || profile.id || ''
-    ),
-    createProfileInfoRow(
-      'Based on',
-      profile.inheritedFrom || 'unknown'
-    ),
-    createProfileInfoRow(
-      'Imported',
-      formatCustomPrinterProfileDate(profile.importedAt)
-    ),
-    createProfileInfoRow(
-      'Changed settings',
-      createChangedSettingsDetails(changedSettings)
-    ),
-    createProfileInfoRow(
-      'Source',
-      'manual import'
-    )
+    createProfileInfoRow('Name', profile.displayName || profile.id || ''),
+    createProfileInfoRow('Based on', profile.inheritedFrom || 'unknown'),
+    createProfileInfoRow('Imported', formatCustomPrinterProfileDate(profile.importedAt)),
+    createProfileInfoRow('Changed settings', createChangedSettingsDetails(changedSettings)),
+    createProfileInfoRow('Source', 'manual import')
   );
 }
 
-function renderCustomPrinterProfileSelect(savedId = U1_CUSTOM_PRINTER_STANDARD_ID) {
-  const select = document.getElementById('customPrinterProfileId');
-  const deleteBtn = document.getElementById('deleteCustomPrinterProfileBtn');
+function renderCustomPrinterProfileSelect({
+  profileMap,
+  selectId,
+  deleteButtonId,
+  infoId,
+  savedId = U1_CUSTOM_PRINTER_STANDARD_ID,
+}) {
+  const select = document.getElementById(selectId);
+  const deleteBtn = document.getElementById(deleteButtonId);
 
   if (!select) return;
 
@@ -211,65 +210,151 @@ function renderCustomPrinterProfileSelect(savedId = U1_CUSTOM_PRINTER_STANDARD_I
   standard.textContent = 'Standard U1 profile';
   select.appendChild(standard);
 
-  for (const profile of buildCustomPrinterProfileSelectRows(customPrinterProfiles)) {
-    const opt = document.createElement('option');
-    opt.value = profile.id;
-    opt.textContent = `${profile.displayName} (${profile.overrideCount} overrides)`;
-    select.appendChild(opt);
+  for (const profile of buildCustomPrinterProfileSelectRows(profileMap)) {
+    const option = document.createElement('option');
+    option.value = profile.id;
+    option.textContent =
+      `${profile.displayName} (${profile.overrideCount} overrides)`;
+    select.appendChild(option);
   }
 
-  select.value = customPrinterProfiles[savedId]
+  select.value = profileMap[savedId]
     ? savedId
     : U1_CUSTOM_PRINTER_STANDARD_ID;
 
   if (deleteBtn) {
-    deleteBtn.disabled = select.value === U1_CUSTOM_PRINTER_STANDARD_ID;
+    deleteBtn.disabled =
+      select.value === U1_CUSTOM_PRINTER_STANDARD_ID;
   }
 
-  const selected = customPrinterProfiles[select.value];
+  renderCustomPrinterProfileInfo(
+    profileMap[select.value] || null,
+    infoId
+  );
+}
 
-  renderCustomPrinterProfileInfo(selected || null);
+function renderBothPrinterProfileSelects(saved = {}) {
+  renderCustomPrinterProfileSelect({
+    profileMap: customPrinterProfiles,
+    selectId: 'customPrinterProfileId',
+    deleteButtonId: 'deleteCustomPrinterProfileBtn',
+    infoId: 'customPrinterProfileInfo',
+    savedId:
+      saved.customPrinterProfileId ||
+      U1_CUSTOM_PRINTER_STANDARD_ID,
+  });
 
+  renderCustomPrinterProfileSelect({
+    profileMap: orcaCustomPrinterProfiles,
+    selectId: 'orcaCustomPrinterProfileId',
+    deleteButtonId: 'deleteOrcaCustomPrinterProfileBtn',
+    infoId: 'orcaCustomPrinterProfileInfo',
+    savedId:
+      saved.orcaCustomPrinterProfileId ||
+      U1_CUSTOM_PRINTER_STANDARD_ID,
+  });
+}
+
+function updatePrinterProfileUi() {
+  const enabled =
+    document.getElementById('orcaCompatibility')?.checked === true;
+
+  const cards = document.getElementById('printerProfileCards');
+  const snorcaCard = document.getElementById('snorcaPrinterProfileCard');
+  const orcaCard = document.getElementById('orcaPrinterProfileCard');
+
+  if (!cards || !snorcaCard || !orcaCard) return;
+
+  const activeCard = enabled ? orcaCard : snorcaCard;
+  const inactiveCard = enabled ? snorcaCard : orcaCard;
+
+  cards.prepend(activeCard);
+  cards.append(inactiveCard);
+
+  activeCard.classList.remove('is-inactive');
+  inactiveCard.classList.add('is-inactive');
+
+  activeCard.setAttribute('aria-disabled', 'false');
+  inactiveCard.setAttribute('aria-disabled', 'true');
+
+  activeCard.querySelectorAll('select, button').forEach(element => {
+    element.disabled = false;
+  });
+
+  inactiveCard.querySelectorAll('select, button').forEach(element => {
+    element.disabled = true;
+  });
 }
 
 async function saveCustomPrinterProfiles() {
   await setLocalStorage({
     [U1_CUSTOM_PRINTER_PROFILE_STORAGE_KEY]: customPrinterProfiles,
+    [U1_ORCA_CUSTOM_PRINTER_PROFILE_STORAGE_KEY]: orcaCustomPrinterProfiles,
   });
 }
 
-async function importCustomPrinterProfileFiles(fileList) {
+function openPrinterProfileTargetDialog(fileList) {
+  pendingPrinterProfileFiles = Array.from(fileList || []);
+  if (!pendingPrinterProfileFiles.length) return;
+
+  const dialog = document.getElementById('printerProfileTargetDialog');
+  if (!dialog) return;
+
+  dialog.showModal();
+}
+
+async function importCustomPrinterProfileFiles(fileList, target) {
   const files = Array.from(fileList || []);
   if (!files.length) return;
 
+  const targetMap =
+    target === 'orca'
+      ? orcaCustomPrinterProfiles
+      : customPrinterProfiles;
+
   let imported = 0;
   const errors = [];
+  let latestId = U1_CUSTOM_PRINTER_STANDARD_ID;
 
   for (const file of files) {
     try {
       const text = await file.text();
       const json = JSON.parse(text);
       const profile = normalizeCustomPrinterProfileJson(json, file.name);
-      profile.sourceMode = 'manual';
 
-      customPrinterProfiles[profile.id] = profile;
+      profile.sourceMode = 'manual';
+      profile.targetSlicer = target === 'orca' ? 'orca' : 'snorca';
+
+      targetMap[profile.id] = profile;
+      latestId = profile.id;
       imported++;
-    } catch (err) {
-      errors.push(`${file.name}: ${err.message || err}`);
+    } catch (error) {
+      errors.push(`${file.name}: ${error.message || error}`);
     }
   }
 
   await saveCustomPrinterProfiles();
 
-  const selectedId = imported
-    ? Object.values(customPrinterProfiles).sort((a, b) => String(b.importedAt).localeCompare(String(a.importedAt)))[0]?.id
-    : U1_CUSTOM_PRINTER_STANDARD_ID;
+  const currentSaved = {
+    customPrinterProfileId:
+      document.getElementById('customPrinterProfileId')?.value ||
+      U1_CUSTOM_PRINTER_STANDARD_ID,
 
-  renderCustomPrinterProfileSelect(selectedId);
+    orcaCustomPrinterProfileId:
+      document.getElementById('orcaCustomPrinterProfileId')?.value ||
+      U1_CUSTOM_PRINTER_STANDARD_ID,
+  };
 
   if (imported) {
-    document.getElementById('customPrinterProfileId').value = selectedId;
+    if (target === 'orca') {
+      currentSaved.orcaCustomPrinterProfileId = latestId;
+    } else {
+      currentSaved.customPrinterProfileId = latestId;
+    }
   }
+
+  renderBothPrinterProfileSelects(currentSaved);
+  updatePrinterProfileUi();
 
   if (errors.length) {
     console.warn('[U1 options] custom printer profile import errors:', errors);
@@ -279,20 +364,46 @@ async function importCustomPrinterProfileFiles(fileList) {
   }
 }
 
-async function deleteSelectedCustomPrinterProfile() {
-  const select = document.getElementById('customPrinterProfileId');
+async function deleteSelectedCustomPrinterProfile(target) {
+  const isOrca = target === 'orca';
+  const selectId = isOrca
+    ? 'orcaCustomPrinterProfileId'
+    : 'customPrinterProfileId';
+
+  const select = document.getElementById(selectId);
   if (!select || select.value === U1_CUSTOM_PRINTER_STANDARD_ID) return;
 
-  const id = select.value;
-  delete customPrinterProfiles[id];
+  const profileMap = isOrca
+    ? orcaCustomPrinterProfiles
+    : customPrinterProfiles;
 
+  delete profileMap[select.value];
   await saveCustomPrinterProfiles();
 
-  renderCustomPrinterProfileSelect(U1_CUSTOM_PRINTER_STANDARD_ID);
+  const saved = {
+    customPrinterProfileId:
+      document.getElementById('customPrinterProfileId')?.value ||
+      U1_CUSTOM_PRINTER_STANDARD_ID,
 
-  await setSyncStorage({
-    customPrinterProfileId: U1_CUSTOM_PRINTER_STANDARD_ID,
-  });
+    orcaCustomPrinterProfileId:
+      document.getElementById('orcaCustomPrinterProfileId')?.value ||
+      U1_CUSTOM_PRINTER_STANDARD_ID,
+  };
+
+  if (isOrca) {
+    saved.orcaCustomPrinterProfileId = U1_CUSTOM_PRINTER_STANDARD_ID;
+  } else {
+    saved.customPrinterProfileId = U1_CUSTOM_PRINTER_STANDARD_ID;
+  }
+
+  renderBothPrinterProfileSelects(saved);
+  updatePrinterProfileUi();
+
+  await setSyncStorage(
+    isOrca
+      ? { orcaCustomPrinterProfileId: U1_CUSTOM_PRINTER_STANDARD_ID }
+      : { customPrinterProfileId: U1_CUSTOM_PRINTER_STANDARD_ID }
+  );
 
   setStatus('Custom printer profile deleted ✓');
 }
@@ -304,6 +415,8 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     printProfileMode:      document.getElementById('printProfileModeForce')?.checked ? 'force' : 'preserve',
     forcedProfileId:       document.getElementById('forcedProfileId')?.value || '0.20mm-standard',
     customPrinterProfileId: document.getElementById('customPrinterProfileId')?.value || U1_CUSTOM_PRINTER_STANDARD_ID,
+    orcaCustomPrinterProfileId: document.getElementById('orcaCustomPrinterProfileId')?.value || U1_CUSTOM_PRINTER_STANDARD_ID,
+    orcaCompatibility:    document.getElementById('orcaCompatibility')?.checked ?? false,
     filamentPresetMode:    document.getElementById('filamentPresetMode')?.value || 'preserve',
     forceExcludeObject:    document.getElementById('forceExcludeObject')?.checked ?? true,
     forceBrimOff:          document.getElementById('forceBrimOff')?.checked ?? true,
@@ -325,64 +438,99 @@ document.getElementById('importCustomPrinterProfileBtn')?.addEventListener('clic
   document.getElementById('customPrinterProfileFiles')?.click();
 });
 
-document.getElementById('customPrinterProfileFiles')?.addEventListener('change', async (event) => {
-  await importCustomPrinterProfileFiles(event.target.files);
+document.getElementById('customPrinterProfileFiles')?.addEventListener('change', (event) => {
+  openPrinterProfileTargetDialog(event.target.files);
   event.target.value = '';
 });
 
-document.getElementById('deleteCustomPrinterProfileBtn')?.addEventListener('click', deleteSelectedCustomPrinterProfile);
-
-document.getElementById('customPrinterProfileId')?.addEventListener('change', () => {
-  renderCustomPrinterProfileSelect(document.getElementById('customPrinterProfileId').value);
+document.getElementById('cancelPrinterProfileImportBtn')?.addEventListener('click', () => {
+  pendingPrinterProfileFiles = [];
+  document.getElementById('printerProfileTargetDialog')?.close();
 });
+
+document.getElementById('confirmPrinterProfileImportBtn')?.addEventListener('click', async () => {
+  const target =
+    document.querySelector('input[name="printerProfileTarget"]:checked')?.value ||
+    'snorca';
+
+  const files = pendingPrinterProfileFiles;
+  pendingPrinterProfileFiles = [];
+
+  document.getElementById('printerProfileTargetDialog')?.close();
+  await importCustomPrinterProfileFiles(files, target);
+});
+
+document.getElementById('deleteCustomPrinterProfileBtn')?.addEventListener('click', () => {
+  deleteSelectedCustomPrinterProfile('snorca');
+});
+
+document.getElementById('deleteOrcaCustomPrinterProfileBtn')?.addEventListener('click', () => {
+  deleteSelectedCustomPrinterProfile('orca');
+});
+
+document.getElementById('customPrinterProfileId')?.addEventListener('change', (event) => {
+  renderCustomPrinterProfileSelect({
+    profileMap: customPrinterProfiles,
+    selectId: 'customPrinterProfileId',
+    deleteButtonId: 'deleteCustomPrinterProfileBtn',
+    infoId: 'customPrinterProfileInfo',
+    savedId: event.target.value,
+  });
+  updatePrinterProfileUi();
+});
+
+document.getElementById('orcaCustomPrinterProfileId')?.addEventListener('change', (event) => {
+  renderCustomPrinterProfileSelect({
+    profileMap: orcaCustomPrinterProfiles,
+    selectId: 'orcaCustomPrinterProfileId',
+    deleteButtonId: 'deleteOrcaCustomPrinterProfileBtn',
+    infoId: 'orcaCustomPrinterProfileInfo',
+    savedId: event.target.value,
+  });
+  updatePrinterProfileUi();
+});
+
+document.getElementById('orcaCompatibility')?.addEventListener('change', updatePrinterProfileUi);
 document.getElementById('printProfileModePreserve')?.addEventListener('change', updatePrintProfileUi);
 document.getElementById('printProfileModeForce')?.addEventListener('change', updatePrintProfileUi);
 
 (async function initOptionsPage() {
   const s = await getSyncStorage(DEFAULTS);
-  
   const printProfileMode = s.printProfileMode || 'preserve';
 
-  if (document.getElementById('printProfileModePreserve')) {
-    document.getElementById('printProfileModePreserve').checked = printProfileMode !== 'force';
-  }
+  document.getElementById('printProfileModePreserve').checked =
+    printProfileMode !== 'force';
 
-  if (document.getElementById('printProfileModeForce')) {
-    document.getElementById('printProfileModeForce').checked = printProfileMode === 'force';
-  }
+  document.getElementById('printProfileModeForce').checked =
+    printProfileMode === 'force';
 
-  if (document.getElementById('filamentPresetMode')) {
-    document.getElementById('filamentPresetMode').value = s.filamentPresetMode || 'preserve';
-  }
-  if (document.getElementById('forceExcludeObject')) {
-    document.getElementById('forceExcludeObject').checked = s.forceExcludeObject;
-  }
-  if (document.getElementById('forceBrimOff')) {
-    document.getElementById('forceBrimOff').checked = s.forceBrimOff;
-  }
-  if (document.getElementById('autoFixOrganicVariableLayer')) {
-    document.getElementById('autoFixOrganicVariableLayer').checked =
-      s.autoFixOrganicVariableLayer;
-  }
-  if (document.getElementById('fixMultiPlatePositioning')) {
-    document.getElementById('fixMultiPlatePositioning').checked =
-      s.fixMultiPlatePositioning;
-  }
-  if (document.getElementById('debugReport')) {
-    document.getElementById('debugReport').checked = s.debugReport;
-  }
-  if (document.getElementById('deepDebugReport')) {
-    document.getElementById('deepDebugReport').checked = s.deepDebugReport;
-  }
-  if (document.getElementById('smartProcessMerge')) {
-    document.getElementById('smartProcessMerge').checked = s.smartProcessMerge;
-  }
-  if (document.getElementById('strictProcessMerge')) {
-    document.getElementById('strictProcessMerge').checked = s.strictProcessMerge;
-  }
+  document.getElementById('orcaCompatibility').checked =
+    s.orcaCompatibility === true;
+
+  document.getElementById('filamentPresetMode').value =
+    s.filamentPresetMode || 'preserve';
+
+  document.getElementById('forceExcludeObject').checked =
+    s.forceExcludeObject;
+
+  document.getElementById('forceBrimOff').checked =
+    s.forceBrimOff;
+
+  document.getElementById('autoFixOrganicVariableLayer').checked =
+    s.autoFixOrganicVariableLayer;
+
+  document.getElementById('fixMultiPlatePositioning').checked =
+    s.fixMultiPlatePositioning;
+
+  document.getElementById('debugReport').checked = s.debugReport;
+  document.getElementById('deepDebugReport').checked = s.deepDebugReport;
+  document.getElementById('smartProcessMerge').checked = s.smartProcessMerge;
+  document.getElementById('strictProcessMerge').checked = s.strictProcessMerge;
 
   await loadProfiles(s.forcedProfileId || '0.20mm-standard');
   updatePrintProfileUi();
+
   await loadCustomPrinterProfiles();
-  renderCustomPrinterProfileSelect(s.customPrinterProfileId || U1_CUSTOM_PRINTER_STANDARD_ID);
+  renderBothPrinterProfileSelects(s);
+  updatePrinterProfileUi();
 })();

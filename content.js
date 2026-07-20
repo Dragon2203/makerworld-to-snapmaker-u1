@@ -33,6 +33,8 @@ function createButtonIconSvg(state) {
     printProfileMode:      'preserve',
     forcedProfileId:       '0.20mm-standard',
     customPrinterProfileId: U1_CUSTOM_PRINTER_STANDARD_ID,
+    orcaCustomPrinterProfileId: U1_CUSTOM_PRINTER_STANDARD_ID,
+    orcaCompatibility:    false,
     filamentPresetMode:    'preserve',
     forceExcludeObject:    true,
     forceBrimOff:          true,
@@ -413,16 +415,42 @@ function createButtonIconSvg(state) {
       let customPrinterProfile = null;
       let customPrinterProfileMissing = false;
 
-      const selectedCustomPrinterProfileId =
-        currentSettings.customPrinterProfileId || U1_CUSTOM_PRINTER_STANDARD_ID;
+      const useOrcaCompatibility =
+        currentSettings.orcaCompatibility === true;
 
-      if (selectedCustomPrinterProfileId !== U1_CUSTOM_PRINTER_STANDARD_ID) {
+      const selectedCustomPrinterProfileId =
+        useOrcaCompatibility
+          ? (
+              currentSettings.orcaCustomPrinterProfileId ||
+              U1_CUSTOM_PRINTER_STANDARD_ID
+            )
+          : (
+              currentSettings.customPrinterProfileId ||
+              U1_CUSTOM_PRINTER_STANDARD_ID
+            );
+
+      if (
+        selectedCustomPrinterProfileId !==
+        U1_CUSTOM_PRINTER_STANDARD_ID
+      ) {
         const localSettings = await getStorageLocalSafe({
-          u1CustomPrinterProfiles: {},
+          [U1_CUSTOM_PRINTER_PROFILE_STORAGE_KEY]: {},
+          [U1_ORCA_CUSTOM_PRINTER_PROFILE_STORAGE_KEY]: {},
         });
 
+        const activeProfileMap =
+          useOrcaCompatibility
+            ? localSettings[
+                U1_ORCA_CUSTOM_PRINTER_PROFILE_STORAGE_KEY
+              ]
+            : localSettings[
+                U1_CUSTOM_PRINTER_PROFILE_STORAGE_KEY
+              ];
+
         customPrinterProfile =
-          localSettings.u1CustomPrinterProfiles?.[selectedCustomPrinterProfileId] || null;
+          activeProfileMap?.[
+            selectedCustomPrinterProfileId
+          ] || null;
 
         if (!customPrinterProfile) {
           customPrinterProfileMissing = true;

@@ -149,21 +149,39 @@ async function buildU1Project(input, opts = {}) {
   );
 
 // -----------------------------------------------------------------------------
-// Apply custom printer profile
+// Apply selected printer profile / optional Orca compatibility
 // -----------------------------------------------------------------------------
-  const customPrinterProfileReport = applyCustomPrinterProfileToU1Settings(
-    combined,
-    converterOptions.customPrinterProfile || null,
-    { targetFilamentCount }
-  );
+  const customPrinterProfileReport =
+    converterOptions.orcaCompatibility === true
+      ? applyOrcaCompatibilityToU1Settings(
+          combined,
+          converterOptions.customPrinterProfile || null,
+          { targetFilamentCount }
+        )
+      : applyCustomPrinterProfileToU1Settings(
+          combined,
+          converterOptions.customPrinterProfile || null,
+          { targetFilamentCount }
+        );
 
   customPrinterProfileReport.requested =
-    converterOptions.selectedCustomPrinterProfileId || U1_CUSTOM_PRINTER_STANDARD_ID;
+    converterOptions.selectedCustomPrinterProfileId ||
+    U1_CUSTOM_PRINTER_STANDARD_ID;
 
   customPrinterProfileReport.mode =
-    customPrinterProfileReport.requested === U1_CUSTOM_PRINTER_STANDARD_ID
-      ? 'standard'
-      : 'manual';
+    converterOptions.orcaCompatibility === true
+      ? (
+          customPrinterProfileReport.requested ===
+          U1_CUSTOM_PRINTER_STANDARD_ID
+            ? 'orca-standard'
+            : 'orca-custom'
+        )
+      : (
+          customPrinterProfileReport.requested ===
+          U1_CUSTOM_PRINTER_STANDARD_ID
+            ? 'snorca-standard'
+            : 'snorca-custom'
+        );
 
 // -----------------------------------------------------------------------------
 // Assemble final Project object

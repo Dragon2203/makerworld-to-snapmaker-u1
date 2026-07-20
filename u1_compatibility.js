@@ -119,7 +119,7 @@ function applyU1UserOptionCompatibilityRules(settings, options = {}) {
       type: 'set',
       key: 'exclude_object',
       value: '1',
-      reason: 'Exclude Object was enabled because SnOrca needs it for Adaptive Bed Mesh / object-aware features.'
+      reason: 'Exclude Object was enabled to preserve Adaptive Bed Mesh and object-aware features in the converted U1 project.'
     });
   }
 
@@ -135,7 +135,7 @@ function applyU1UserOptionCompatibilityRules(settings, options = {}) {
       type: 'set',
       key: 'brim_type',
       value: 'no_brim',
-      reason: 'Brim was forced off to avoid unnecessary automatic brims in SnOrca.'
+      reason: 'Brim was forced off to avoid unnecessary automatic brims in the target slicer.'
     });
   }
 

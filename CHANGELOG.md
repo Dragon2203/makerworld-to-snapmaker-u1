@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
+## [1.4.0] - 2026-07-20
+
+### Added
+
+- Added optional OrcaSlicer compatibility mode.
+- Added support for importing custom OrcaSlicer printer profiles.
+
+### Improved
+
+- Improved the converter settings page with a redesigned printer profile management section.
 
 ## [1.3.0] - 2026-07-18
 
