@@ -54,6 +54,23 @@ function analyzeU1Compatibility(settings, options = {}) {
     }
   }
 
+  const raftFirstLayerExpansion =
+    Number(settings.raft_first_layer_expansion);
+
+  if (
+    Number.isFinite(raftFirstLayerExpansion) &&
+    raftFirstLayerExpansion < 0
+  ) {
+    actions.push({
+      id: 'reset-negative-raft-first-layer-expansion',
+      type: 'reset-profile-default',
+      key: 'raft_first_layer_expansion',
+      value: '2',
+      reason:
+        'Negative raft first-layer expansion is not valid for the Snapmaker U1 profile and was reset to the native U1 default.'
+    });
+  }
+
   return {
     actions,
     warnings
@@ -65,8 +82,14 @@ function applyU1Compatibility(settings, report) {
 
   for (const action of report.actions) {
     if (action.type === 'replace') {
-        settings[action.key] = action.value;
-        addDifferentSetting(settings, action.key);
+      settings[action.key] = action.value;
+      addDifferentSetting(settings, action.key);
+      continue;
+    }
+
+    if (action.type === 'reset-profile-default') {
+      settings[action.key] = action.value;
+      removeDifferentSetting(settings, action.key);
     }
   }
 }
@@ -97,6 +120,29 @@ function addDifferentSetting(settings, key) {
   }
 
   settings.different_settings_to_system[0] = parts.join(';');
+}
+
+function removeDifferentSetting(settings, key) {
+  if (!settings || !key) return;
+
+  const diff = settings.different_settings_to_system;
+
+  if (Array.isArray(diff)) {
+    diff[0] = String(diff[0] || '')
+      .split(';')
+      .map(value => value.trim())
+      .filter(value => value && value !== key)
+      .join(';');
+
+    return;
+  }
+
+  settings.different_settings_to_system =
+    String(diff || '')
+      .split(';')
+      .map(value => value.trim())
+      .filter(value => value && value !== key)
+      .join(';');
 }
 
 function applyU1UserOptionCompatibilityRules(settings, options = {}) {

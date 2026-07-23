@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
+## [1.4.1] - 2026-07-23
+
+### Improved
+
+- Improved OrcaSlicer compatibility by automatically normalizing several required filament arrays.
+- Improved compatibility with MakerWorld projects containing more than four filament slots.
+- Improved handling of invalid `raft_first_layer_expansion` values by restoring the native U1 profile default.
+
+### Fixed
+
+- Fixed an OrcaSlicer crash caused by empty `filament_adaptive_volumetric_speed` entries.
+- Fixed invalid project configuration warnings caused by inconsistent `filament_self_index` values.
+- Fixed `filament_flush_temp` warnings shown when opening converted projects.
+- Fixed negative `raft_first_layer_expansion` values causing compatibility warnings in Snapmaker Orca and OrcaSlicer.
+
 ## [1.4.0] - 2026-07-20
 
 ### Added

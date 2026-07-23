@@ -136,6 +136,58 @@ const ALWAYS_SLOT_FILAMENT_KEYS = new Set([
   'filament_is_support'
 ]);
 
+// OrcaSlicer requires valid numeric values in these filament arrays.
+//
+// Experimentally verified behavior:
+// - empty filament_adaptive_volumetric_speed values crash OrcaSlicer
+// - empty filament_self_index values make the project configuration invalid
+// - empty filament_flush_temp values produce an invalid-value warning
+function normalizeRequiredOrcaFilamentArrays(
+  settings,
+  targetFilamentCount
+) {
+  if (!settings || targetFilamentCount <= 0) return;
+
+  function normalizeNumericArray(key, fallback = '0') {
+    const current = Array.isArray(settings[key])
+      ? settings[key]
+      : [];
+
+    settings[key] = Array.from(
+      { length: targetFilamentCount },
+      (_, index) => {
+        const value = current[index];
+
+        if (
+          value === undefined ||
+          value === null ||
+          value === '' ||
+          value === 'nil'
+        ) {
+          return fallback;
+        }
+
+        return String(value);
+      }
+    );
+  }
+
+  normalizeNumericArray(
+    'filament_adaptive_volumetric_speed',
+    '0'
+  );
+
+  normalizeNumericArray(
+    'filament_flush_temp',
+    '0'
+  );
+
+  settings.filament_self_index = Array.from(
+    { length: targetFilamentCount },
+    (_, index) => String(index + 1)
+  );
+}
+
 function isSourceSlotFilamentArray(key, value, realFilamentCount) {
   if (!Array.isArray(value)) return false;
   if (ALWAYS_SLOT_FILAMENT_KEYS.has(key)) return true;
@@ -413,12 +465,28 @@ function applyFinalU1FilamentPass(
 
   for (const key of filamentKeys) {
     if (!Array.isArray(combined[key])) continue;
-    while (combined[key].length < targetFilamentCount) combined[key].push('');
-    combined[key] = combined[key].slice(0, targetFilamentCount);
+
+    while (combined[key].length < targetFilamentCount) {
+      combined[key].push('');
+    }
+
+    combined[key] = combined[key].slice(
+      0,
+      targetFilamentCount
+    );
   }
+
+  if (options.orcaCompatibility === true) {
+    normalizeRequiredOrcaFilamentArrays(
+      combined,
+      targetFilamentCount
+    );
+  }
+
   for (let i = 0; i < targetFilamentCount; i++) {
-      combined.inherits_group[i] = '';
+    combined.inherits_group[i] = '';
   }
+
   const processDiff = parseDifferentSettingsToSystem(
     Array.isArray(combined.different_settings_to_system)
       ? combined.different_settings_to_system[0]
