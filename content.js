@@ -29,6 +29,12 @@ function createButtonIconSvg(state) {
 }
 
 (() => {
+  // Internal development-build switch.
+  //
+  // This is unrelated to Chrome's extension developer mode.
+  // Keep the value identical to options.js.
+  const ENABLE_U1_FAULT_SIMULATION = true;
+
   const SETTING_DEFAULTS = {
     printProfileMode:      'preserve',
     forcedProfileId:       '0.20mm-standard',
@@ -44,6 +50,8 @@ function createButtonIconSvg(state) {
     deepDebugReport:       false,
     smartProcessMerge:    true,
     strictProcessMerge:   false,
+
+    u1TestFault:          'none',
   };
 
   let u1ModeActive       = false;
@@ -53,6 +61,23 @@ function createButtonIconSvg(state) {
   let _bypassInterceptor = false;
   let _btnState          = null;    // currently rendered DOM state
   let _resultState       = 'ready'; // persistent state for the current page interaction
+  let _dropdownUiBusy    = false;
+  let _errorDropdownState = null;
+  let _lastErrorReportText = '';
+
+  // MakerWorld keeps the selected download action in its current React state
+  // even after we restore the persisted localStorage preference.
+  //
+  // Remember that 3MF was selected for the current page so repeated
+  // conversions can use the main button directly without reopening the menu.
+  let _makerWorld3mfSelectedForPage =
+    false;
+
+  const MAKERWORLD_ACTION_STORAGE_KEY =
+    'model_operate_last_key';
+
+  const MAKERWORLD_DOWNLOAD_3MF_ACTION =
+    'download_3mf';
 
   const isFirefox =
     chrome.runtime.getURL('').startsWith('moz-extension://');
@@ -101,6 +126,113 @@ function createButtonIconSvg(state) {
     );
 
     return { ...defaults };
+  }
+
+  async function setStorageSyncSafe(values) {
+    try {
+      if (
+        typeof browser !== 'undefined' &&
+        browser.storage?.sync?.set
+      ) {
+        await browser.storage.sync.set(
+          values
+        );
+
+        return true;
+      }
+
+      if (
+        typeof chrome !== 'undefined' &&
+        chrome.storage?.sync?.set
+      ) {
+        return await new Promise(
+          resolve => {
+            chrome.storage.sync.set(
+              values,
+              () => {
+                if (
+                  chrome.runtime?.lastError
+                ) {
+                  console.warn(
+                    '[U1 Extension] sync storage write failed:',
+                    chrome.runtime.lastError.message
+                  );
+
+                  resolve(false);
+                  return;
+                }
+
+                resolve(true);
+              }
+            );
+          }
+        );
+      }
+    } catch (error) {
+      console.warn(
+        '[U1 Extension] sync storage write failed:',
+        error
+      );
+    }
+
+    return false;
+  }
+
+  async function consumeU1TestFault() {
+    if (
+      ENABLE_U1_FAULT_SIMULATION !== true
+    ) {
+      return 'none';
+    }
+
+    const stored =
+      await getStorageSyncSafe({
+        u1TestFault:
+          'none',
+      });
+
+    const selectedFault =
+      String(
+        stored?.u1TestFault ||
+        'none'
+      );
+
+    if (selectedFault === 'none') {
+      return 'none';
+    }
+
+    // Reset before running the conversion.
+    //
+    // Even when the simulated error is thrown immediately afterwards,
+    // the following conversion starts normally.
+    await setStorageSyncSafe({
+      u1TestFault:
+        'none',
+    });
+
+    return selectedFault;
+  }
+
+  function getMakerWorldModelId(
+    pathname = location.pathname
+  ) {
+    return (
+      String(pathname || '')
+        .match(/\/models\/(\d+)(?:-|\/|$)/)?.[1] ||
+      null
+    );
+  }
+
+  function getMakerWorldInstanceId(
+    requestUrl
+  ) {
+    return (
+      String(requestUrl || '')
+        .match(
+          /\/instance\/(\d+)\/f3mf(?:[/?#]|$)/
+        )?.[1] ||
+      null
+    );
   }
 
   async function getStorageLocalSafe(defaults) {
@@ -188,15 +320,27 @@ function createButtonIconSvg(state) {
     .convert-button__content {
       position: relative;
       z-index: 2;
-      display: flex;
+      display: grid;
+      grid-template-columns: 29px minmax(0, 1fr) 29px;
       align-items: center;
-      justify-content: center;
-      gap: 9px;
       width: 100%;
       white-space: nowrap;
     }
+    .convert-button__content::after {
+      content: '';
+      grid-column: 3;
+      width: 29px;
+      height: 20px;
+    }
     .convert-button__icon {
-      display: grid; flex: 0 0 20px; width: 20px; height: 20px; place-items: center;
+      grid-column: 1;
+      justify-self: end;
+      display: grid; width: 20px; height: 20px; place-items: center;
+    }
+    .convert-button__label {
+      grid-column: 2;
+      min-width: 0;
+      text-align: center;
     }
     .convert-button__icon svg { grid-area: 1 / 1; width: 20px; height: 20px; }
     .convert-button__icon-loading,
@@ -228,8 +372,7 @@ function createButtonIconSvg(state) {
       .convert-button__progress,
       .convert-button__icon-loading,
       .convert-button__icon-success,
-      .convert-button__icon-error,
-      .convert-button__dots span { animation: none !important; }
+      .convert-button__icon-error { animation: none !important; }
     }
   `;
   (document.head || document.documentElement).appendChild(__u1Style);
@@ -285,56 +428,162 @@ function createButtonIconSvg(state) {
 
   // Update the existing button through classList and textContent only.
   function setConvertButtonState(btn, state) {
-    if (_btnState === state) return; // idempotency guard: same state → no DOM mutation → no MO loop
-    const label   = btn?.querySelector('span');
-    if (!label)   return;
-    const labelEl = label.querySelector('.convert-button__label');
-    label.classList.remove('is-converting', 'is-success', 'is-error');
+    const label =
+      btn?.querySelector('span');
+
+    if (!label) return;
+
+    const labelEl =
+      label.querySelector(
+        '.convert-button__label'
+      );
+
+    const expectedText =
+      state === 'converting'
+        ? 'Converting profile'
+        : state === 'success'
+          ? 'U1 profile ready'
+          : state === 'error'
+            ? 'Conversion failed'
+            : 'Convert to Snapmaker U1';
+
+    const expectedClassPresent =
+      state === 'converting'
+        ? label.classList.contains(
+            'is-converting'
+          )
+        : state === 'success'
+          ? label.classList.contains(
+              'is-success'
+            )
+          : state === 'error'
+            ? label.classList.contains(
+                'is-error'
+              )
+            : (
+                !label.classList.contains(
+                  'is-converting'
+                ) &&
+                !label.classList.contains(
+                  'is-success'
+                ) &&
+                !label.classList.contains(
+                  'is-error'
+                )
+              );
+
+    // Skip the DOM update only when both our internal state and the actual
+    // rendered MakerWorld button still match. MakerWorld may rerender or
+    // replace the button while selecting the 3MF action.
+    if (
+      _btnState === state &&
+      labelEl &&
+      labelEl.textContent === expectedText &&
+      expectedClassPresent
+    ) {
+      return;
+    }
+
+    label.classList.remove(
+      'is-converting',
+      'is-success',
+      'is-error'
+    );
+
     switch (state) {
       case 'converting':
-        label.classList.add('is-converting');
-        if (labelEl) labelEl.textContent = 'Converting profile';
+        label.classList.add(
+          'is-converting'
+        );
+
+        if (labelEl) {
+          labelEl.textContent =
+            'Converting profile';
+        }
+
         break;
+
       case 'success':
-        label.classList.add('is-success');
-        if (labelEl) labelEl.textContent = 'U1 profile ready';
+        label.classList.add(
+          'is-success'
+        );
+
+        if (labelEl) {
+          labelEl.textContent =
+            'U1 profile ready';
+        }
+
         break;
+
       case 'error':
-        label.classList.add('is-error');
-        if (labelEl) labelEl.textContent = 'Conversion failed';
+        label.classList.add(
+          'is-error'
+        );
+
+        if (labelEl) {
+          labelEl.textContent =
+            'Conversion failed';
+        }
+
         break;
-      default: // 'ready'
-        if (labelEl) labelEl.textContent = 'Convert to Snapmaker U1';
+
+      default:
+        if (labelEl) {
+          labelEl.textContent =
+            'Convert to Snapmaker U1';
+        }
     }
-    _btnState = state;
+
+    _btnState =
+      state;
   }
 
   function resetConversionResult() {
     _resultState = 'ready';
+    _lastErrorReportText = '';
 
     if (u1ModeActive && !isConverting) {
       updateButton();
     }
   }
-  
+
   function setU1Mode(active) {
+    if (!active) {
+      void resetU1ErrorDropdown({
+        closeDropdown: true,
+      });
+    }
+
     u1ModeActive = active;
     _resultState = 'ready';
+    _lastErrorReportText = '';
 
     window.postMessage({ __u1SetMode: active }, '*');
     updateButton();
   }
 
   function updateButton() {
-    if (isConverting) return;
-    const btn = findButton();
+    const btn =
+      findButton();
+
     if (!btn) return;
-    const label = btn.querySelector('span');
+
+    const label =
+      btn.querySelector('span');
+
     if (!label) return;
 
     if (u1ModeActive) {
-      ensureButtonUI(btn);
-      setConvertButtonState(btn, _resultState);
+      ensureButtonUI(
+        btn
+      );
+
+      setConvertButtonState(
+        btn,
+        isConverting
+          ? 'converting'
+          : _resultState
+      );
     } else {
       // Tear down our UI and restore MakerWorld's original text
       if (label.querySelector('.convert-button__label')) {
@@ -352,12 +601,49 @@ function createButtonIconSvg(state) {
   // Reset a previous success/error result when the user interacts with
   // another part of MakerWorld. No profile-specific state is stored.
   document.addEventListener('click', (e) => {
-    if (!u1ModeActive || isConverting || _resultState === 'ready') return;
+    if (
+      !u1ModeActive ||
+      isConverting ||
+      _dropdownUiBusy ||
+      _resultState === 'ready'
+    ) {
+      return;
+    }
 
     if (e.target.closest('span.primaryButton')) return;
     if (e.target.closest('[data-u1-slide]')) return;
+    if (e.target.closest('[data-u1-error-menu]')) return;
 
-    resetConversionResult();
+    const btn =
+      findButton();
+
+    const arrow =
+      btn
+        ? findDropdownArrow(btn)
+        : null;
+
+    // When the user clicks MakerWorld's own dropdown arrow, restore the
+    // original menu synchronously and let the real click close the dropdown.
+    //
+    // Do not click the arrow programmatically here, otherwise the real user
+    // click and our synthetic click could toggle the dropdown twice.
+    if (
+      arrow &&
+      arrow.contains(e.target)
+    ) {
+      void resetU1ErrorDropdown({
+        closeDropdown: false,
+      });
+
+      resetConversionResult();
+      return;
+    }
+
+    void resetU1ErrorDropdown({
+      closeDropdown: true,
+    }).finally(() => {
+      resetConversionResult();
+    });
   }, true);
 
   // Start or repeat the conversion when the main MakerWorld button is clicked.
@@ -381,62 +667,373 @@ function createButtonIconSvg(state) {
   // ── Conversion orchestration ──────────────────────────────────────────────────
   async function startConversion(btn) {
     isConverting = true;
+
+    // Restore a previous temporary error menu, but keep MakerWorld's dropdown
+    // open when the user already opened it manually.
+    //
+    // clickNativeDownload() can then use the existing dropdown directly,
+    // avoiding the visible close → reopen → close sequence.
+    await resetU1ErrorDropdown({
+      closeDropdown: false,
+    });
+
+    _lastErrorReportText = '';
     setConvertButtonState(btn, 'converting');
 
+    let activeTestFault =
+      'none';
+
+    const makerWorldModelId =
+      getMakerWorldModelId();
+
+    const diagnostics =
+      createU1ConversionDiagnostics({
+        browser:
+          isFirefox
+            ? 'Firefox'
+            : 'Chrome/Chromium',
+
+        pagePath:
+          location.pathname,
+
+        makerWorldModelId,
+
+        pageLanguage:
+          document.documentElement.lang ||
+          navigator.language ||
+          'unknown',
+      });
+
     try {
-      // 1. Capture the .3mf from MakerWorld
-      const blobUrl = await triggerMakerWorldDownload();
+      activeTestFault =
+        await consumeU1TestFault();
 
-      const resp = await fetch(blobUrl);
-      if (!resp.ok) throw new Error(`Blob fetch failed: ${resp.status}`);
+      diagnostics.setMetadata({
+        faultSimulationEnabled:
+          ENABLE_U1_FAULT_SIMULATION === true,
 
-      let buffer = new Uint8Array(await resp.arrayBuffer());
+        simulatedFault:
+          activeTestFault !== 'none'
+            ? activeTestFault
+            : null,
+      });
 
-      // 2. Handle JSON → CDN URL (MakerWorld returns JSON with a CDN link, not raw ZIP)
-      let mwName = null;
+      // -------------------------------------------------------------------------
+      // 1. Capture MakerWorld's authenticated download
+      // -------------------------------------------------------------------------
 
-      // Read the ZIP signature directly.
-      // Firefox may block TypedArray.subarray() across isolated realms
-      // because it accesses the object's constructor internally.
-      if (buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
-        const json = JSON.parse(new TextDecoder().decode(buffer));
-        mwName = json.name || null;
-        const cdnUrl = json.url || json.downloadUrl || json.download_url
-                    || json.fileUrl || json.file_url || json.file;
-        if (!cdnUrl) throw new Error('No download URL in response');
-        const cdnResp = await fetch(cdnUrl);
-        if (!cdnResp.ok) throw new Error(`CDN fetch failed: ${cdnResp.status}`);
-        buffer = new Uint8Array(await cdnResp.arrayBuffer());
+      diagnostics.startStage(
+        U1_DIAGNOSTIC_STAGES.CAPTURE_DOWNLOAD,
+        getU1DiagnosticStageLabel(
+          U1_DIAGNOSTIC_STAGES.CAPTURE_DOWNLOAD
+        )
+      );
+
+      throwU1SimulatedFault(
+        activeTestFault,
+        'download-timeout',
+        'Simulated MakerWorld download timeout.'
+      );
+
+      const capturedDownload =
+        await triggerMakerWorldDownload();
+
+      const blobUrl =
+        typeof capturedDownload === 'string'
+          ? capturedDownload
+          : capturedDownload?.blobUrl;
+
+      const makerWorldRequestUrl =
+        typeof capturedDownload === 'object'
+          ? capturedDownload?.requestUrl
+          : '';
+
+      const makerWorldInstanceId =
+        getMakerWorldInstanceId(
+          makerWorldRequestUrl
+        );
+
+      if (!blobUrl) {
+        throw new Error(
+          'Captured MakerWorld response did not contain a blob URL'
+        );
       }
 
-      // 3. Load current settings + filament rules, then convert in-browser
-      const currentSettings = await getStorageSyncSafe(SETTING_DEFAULTS);
+      diagnostics.setMetadata({
+        capturedResponseType:
+          String(blobUrl).startsWith('blob:')
+            ? 'blob-url'
+            : 'url',
 
-      let customPrinterProfile = null;
-      let customPrinterProfileMissing = false;
+        makerWorldInstanceId,
+      });
+
+      diagnostics.completeStage(
+        U1_DIAGNOSTIC_STAGES.CAPTURE_DOWNLOAD
+      );
+
+      // -------------------------------------------------------------------------
+      // 2. Read captured MakerWorld response
+      // -------------------------------------------------------------------------
+
+      diagnostics.startStage(
+        U1_DIAGNOSTIC_STAGES.FETCH_CAPTURED_RESPONSE,
+        getU1DiagnosticStageLabel(
+          U1_DIAGNOSTIC_STAGES.FETCH_CAPTURED_RESPONSE
+        )
+      );
+
+      throwU1SimulatedFault(
+        activeTestFault,
+        'captured-response-failure',
+        'Simulated captured MakerWorld response failure.'
+      );
+
+      const resp =
+        await fetch(blobUrl);
+
+      diagnostics.setOperation({
+        operation:
+          'fetch-captured-response',
+
+        httpStatus:
+          resp.status,
+
+        responseOk:
+          resp.ok,
+      });
+
+      if (!resp.ok) {
+        throw new Error(
+          `Blob fetch failed: ${resp.status}`
+        );
+      }
+
+      let buffer =
+        new Uint8Array(
+          await resp.arrayBuffer()
+        );
+
+      diagnostics.setMetadata({
+        capturedResponseBytes:
+          buffer.byteLength,
+      });
+
+      diagnostics.completeStage(
+        U1_DIAGNOSTIC_STAGES.FETCH_CAPTURED_RESPONSE
+      );
+
+      // -------------------------------------------------------------------------
+      // 3. Resolve MakerWorld JSON response to its CDN file when necessary
+      // -------------------------------------------------------------------------
+
+      let mwName =
+        null;
+
+      const responseIsZip =
+        buffer[0] === 0x50 &&
+        buffer[1] === 0x4B;
+
+      diagnostics.setMetadata({
+        capturedResponseIsZip:
+          responseIsZip,
+      });
+
+      if (!responseIsZip) {
+        diagnostics.startStage(
+          U1_DIAGNOSTIC_STAGES.FETCH_CDN_FILE,
+          getU1DiagnosticStageLabel(
+            U1_DIAGNOSTIC_STAGES.FETCH_CDN_FILE
+          )
+        );
+
+        throwU1SimulatedFault(
+          activeTestFault,
+          'cdn-download-failure',
+          'Simulated MakerWorld CDN download failure.'
+        );
+
+        diagnostics.setOperation({
+          operation:
+            'parse-makerworld-download-response',
+
+          responseBytes:
+            buffer.byteLength,
+        });
+
+        const json =
+          JSON.parse(
+            new TextDecoder().decode(buffer)
+          );
+
+        mwName =
+          json.name || null;
+
+        const cdnUrl =
+          json.url ||
+          json.downloadUrl ||
+          json.download_url ||
+          json.fileUrl ||
+          json.file_url ||
+          json.file;
+
+        if (!cdnUrl) {
+          throw new Error(
+            'No download URL in response'
+          );
+        }
+
+        diagnostics.setOperation({
+          operation:
+            'fetch-makerworld-cdn-file',
+
+          hasDownloadUrl:
+            true,
+        });
+
+        const cdnResp =
+          await fetch(cdnUrl);
+
+        diagnostics.setOperation({
+          operation:
+            'fetch-makerworld-cdn-file',
+
+          httpStatus:
+            cdnResp.status,
+
+          responseOk:
+            cdnResp.ok,
+        });
+
+        if (!cdnResp.ok) {
+          throw new Error(
+            `CDN fetch failed: ${cdnResp.status}`
+          );
+        }
+
+        buffer =
+          new Uint8Array(
+            await cdnResp.arrayBuffer()
+          );
+
+        diagnostics.setMetadata({
+          makerWorldFileName:
+            mwName,
+
+          source3mfBytes:
+            buffer.byteLength,
+        });
+
+        diagnostics.completeStage(
+          U1_DIAGNOSTIC_STAGES.FETCH_CDN_FILE
+        );
+      } else {
+        diagnostics.setMetadata({
+          source3mfBytes:
+            buffer.byteLength,
+        });
+      }
+
+      // -------------------------------------------------------------------------
+      // 4. Read extension settings
+      // -------------------------------------------------------------------------
+
+      diagnostics.startStage(
+        U1_DIAGNOSTIC_STAGES.READ_SETTINGS,
+        getU1DiagnosticStageLabel(
+          U1_DIAGNOSTIC_STAGES.READ_SETTINGS
+        )
+      );
+
+      throwU1SimulatedFault(
+        activeTestFault,
+        'storage-unavailable',
+        'Simulated extension storage failure.'
+      );
+
+      const currentSettings =
+        await getStorageSyncSafe(
+          SETTING_DEFAULTS
+        );
 
       const useOrcaCompatibility =
-        currentSettings.orcaCompatibility === true;
+        currentSettings.orcaCompatibility ===
+        true;
 
       const selectedCustomPrinterProfileId =
         useOrcaCompatibility
           ? (
-              currentSettings.orcaCustomPrinterProfileId ||
+              currentSettings
+                .orcaCustomPrinterProfileId ||
               U1_CUSTOM_PRINTER_STANDARD_ID
             )
           : (
-              currentSettings.customPrinterProfileId ||
+              currentSettings
+                .customPrinterProfileId ||
               U1_CUSTOM_PRINTER_STANDARD_ID
             );
+
+      diagnostics.setMetadata({
+        targetSlicer:
+          useOrcaCompatibility
+            ? 'OrcaSlicer'
+            : 'Snapmaker Orca',
+
+        selectedCustomPrinterProfileId,
+
+        printProfileMode:
+          currentSettings.printProfileMode,
+
+        filamentPresetMode:
+          currentSettings.filamentPresetMode,
+      });
+
+      diagnostics.completeStage(
+        U1_DIAGNOSTIC_STAGES.READ_SETTINGS
+      );
+
+      // -------------------------------------------------------------------------
+      // 5. Load selected custom printer profile
+      // -------------------------------------------------------------------------
+
+      diagnostics.startStage(
+        U1_DIAGNOSTIC_STAGES.LOAD_PRINTER_PROFILE,
+        getU1DiagnosticStageLabel(
+          U1_DIAGNOSTIC_STAGES.LOAD_PRINTER_PROFILE
+        ),
+        {
+          selectedCustomPrinterProfileId,
+
+          customProfileRequired:
+            selectedCustomPrinterProfileId !==
+            U1_CUSTOM_PRINTER_STANDARD_ID,
+        }
+      );
+
+      throwU1SimulatedFault(
+        activeTestFault,
+        'profile-load-failure',
+        'Simulated printer profile load failure.'
+      );
+
+      let customPrinterProfile =
+        null;
+
+      let customPrinterProfileMissing =
+        false;
 
       if (
         selectedCustomPrinterProfileId !==
         U1_CUSTOM_PRINTER_STANDARD_ID
       ) {
-        const localSettings = await getStorageLocalSafe({
-          [U1_CUSTOM_PRINTER_PROFILE_STORAGE_KEY]: {},
-          [U1_ORCA_CUSTOM_PRINTER_PROFILE_STORAGE_KEY]: {},
-        });
+        const localSettings =
+          await getStorageLocalSafe({
+            [U1_CUSTOM_PRINTER_PROFILE_STORAGE_KEY]:
+              {},
+
+            [U1_ORCA_CUSTOM_PRINTER_PROFILE_STORAGE_KEY]:
+              {},
+          });
 
         const activeProfileMap =
           useOrcaCompatibility
@@ -453,7 +1050,8 @@ function createButtonIconSvg(state) {
           ] || null;
 
         if (!customPrinterProfile) {
-          customPrinterProfileMissing = true;
+          customPrinterProfileMissing =
+            true;
 
           console.warn(
             '[U1 Extension] Selected custom printer profile was not found in local storage:',
@@ -462,89 +1060,288 @@ function createButtonIconSvg(state) {
         }
       }
 
-      const converted = await convertToU1(buffer, {
-        ...currentSettings,
-        customPrinterProfile,
+      diagnostics.setMetadata({
+        customPrinterProfileLoaded:
+          Boolean(customPrinterProfile),
+
         customPrinterProfileMissing,
-        selectedCustomPrinterProfileId,
       });
 
-      // 4. Start the converted file download.
-      //
-      // Chrome/Chromium sends only a Blob URL to the background script,
-      // avoiding large runtime messages.
-      //
-      // Firefox cannot access a MakerWorld-context Blob URL from the
-      // background page, so it receives the finished bytes instead.
-      const slug     = location.pathname.match(/\/models\/\d+-(.+)/)?.[1] || 'model';
-      const baseName = (mwName || (slug.replace(/-/g, '_') + '.3mf')).replace(/\.3mf$/i, '');
-      const outName  = baseName + '-U1.3mf';
+      diagnostics.completeStage(
+        U1_DIAGNOSTIC_STAGES.LOAD_PRINTER_PROFILE
+      );
+
+      // -------------------------------------------------------------------------
+      // 6. Convert the 3MF
+      // -------------------------------------------------------------------------
+
+      const converted =
+        await convertToU1(
+          buffer,
+          {
+            ...currentSettings,
+
+            customPrinterProfile,
+            customPrinterProfileMissing,
+            selectedCustomPrinterProfileId,
+
+            u1TestFault:
+              activeTestFault,
+
+            u1Diagnostics:
+              diagnostics,
+          }
+        );
+        
+      // -------------------------------------------------------------------------
+      // 7. Start converted file download
+      // -------------------------------------------------------------------------
+
+      const slug =
+        location.pathname.match(
+          /\/models\/\d+-(.+)/
+        )?.[1] || 'model';
+
+      const baseName =
+        (
+          mwName ||
+          (
+            slug.replace(/-/g, '_') +
+            '.3mf'
+          )
+        ).replace(/\.3mf$/i, '');
+
+      const outName =
+        baseName + '-U1.3mf';
+
+      diagnostics.startStage(
+        U1_DIAGNOSTIC_STAGES.START_OUTPUT_DOWNLOAD,
+        getU1DiagnosticStageLabel(
+          U1_DIAGNOSTIC_STAGES.START_OUTPUT_DOWNLOAD
+        ),
+        {
+          browser:
+            isFirefox
+              ? 'Firefox'
+              : 'Chrome/Chromium',
+
+          filename:
+            outName,
+
+          outputBytes:
+            converted.byteLength,
+        }
+      );
+
+      throwU1SimulatedFault(
+        activeTestFault,
+        'output-download-failure',
+        'Simulated converted file download failure.'
+      );
 
       if (isFirefox) {
-        // Firefox cannot use a MakerWorld-context Blob URL in the
-        // background downloads API. Send the finished bytes instead.
-        const downloadData = converted.buffer.slice(
-          converted.byteOffset,
-          converted.byteOffset + converted.byteLength
-        );
+        const downloadData =
+          converted.buffer.slice(
+            converted.byteOffset,
+            converted.byteOffset +
+            converted.byteLength
+          );
 
-        const response = await browser.runtime.sendMessage({
-          type: 'u1_download_firefox',
-          data: downloadData,
-          filename: outName,
-        });
+        const response =
+          await browser.runtime.sendMessage({
+            type:
+              'u1_download_firefox',
+
+            data:
+              downloadData,
+
+            filename:
+              outName,
+          });
 
         if (!response?.ok) {
           throw new Error(
-            response?.error || 'Firefox download could not be started'
+            response?.error ||
+            'Firefox download could not be started'
           );
         }
       } else {
-        // Chrome/Chromium uses the existing Blob URL download path.
-        const outBlob = new Blob(
-          [converted],
-          { type: 'application/octet-stream' }
-        );
-        const outUrl = URL.createObjectURL(outBlob);
+        const outBlob =
+          new Blob(
+            [converted],
+            {
+              type:
+                'application/octet-stream',
+            }
+          );
+
+        const outUrl =
+          URL.createObjectURL(outBlob);
 
         try {
-          await new Promise((resolve, reject) => {
-            chrome.runtime.sendMessage({
-              type: 'u1_download',
-              url: outUrl,
-              filename: outName
-            }, (response) => {
-              if (chrome.runtime.lastError) {
-                reject(new Error(
-                  chrome.runtime.lastError.message
-                ));
-                return;
-              }
+          await new Promise(
+            (resolve, reject) => {
+              chrome.runtime.sendMessage(
+                {
+                  type:
+                    'u1_download',
 
-              if (!response?.ok) {
-                reject(new Error(
-                  response?.error || 'Download could not be started'
-                ));
-                return;
-              }
+                  url:
+                    outUrl,
 
-              resolve(response);
-            });
-          });
+                  filename:
+                    outName,
+                },
+                response => {
+                  if (
+                    chrome.runtime.lastError
+                  ) {
+                    reject(
+                      new Error(
+                        chrome.runtime
+                          .lastError.message
+                      )
+                    );
+
+                    return;
+                  }
+
+                  if (!response?.ok) {
+                    reject(
+                      new Error(
+                        response?.error ||
+                        'Download could not be started'
+                      )
+                    );
+
+                    return;
+                  }
+
+                  resolve(response);
+                }
+              );
+            }
+          );
         } finally {
-          setTimeout(() => URL.revokeObjectURL(outUrl), 60_000);
+          setTimeout(
+            () =>
+              URL.revokeObjectURL(
+                outUrl
+              ),
+            60_000
+          );
         }
       }
 
-      _resultState = 'success';
-      setConvertButtonState(btn, _resultState);
+      diagnostics.completeStage(
+        U1_DIAGNOSTIC_STAGES.START_OUTPUT_DOWNLOAD
+      );
+
+      diagnostics.startStage(
+        U1_DIAGNOSTIC_STAGES.FINISHED,
+        getU1DiagnosticStageLabel(
+          U1_DIAGNOSTIC_STAGES.FINISHED
+        )
+      );
+
+      diagnostics.completeStage(
+        U1_DIAGNOSTIC_STAGES.FINISHED
+      );
+
+      diagnostics.finish();
+
+      _resultState =
+        'success';
+
+      setConvertButtonState(
+        btn,
+        _resultState
+      );
     } catch (err) {
-      console.error('[U1 Extension]', err);
-      _resultState = 'error';
-      setConvertButtonState(btn, _resultState);
+      const failedStage =
+        err?.stage ||
+        diagnostics.currentStage ||
+        'conversion';
+
+      const stageDefaults =
+        getU1StageErrorDefaults(
+          failedStage
+        );
+
+      const normalizedError =
+        prepareU1ErrorForReport(
+          err,
+          {
+            diagnostics,
+
+            ...stageDefaults,
+
+            stage:
+              failedStage,
+
+            context: {
+              pagePath:
+                location.pathname,
+
+              browser:
+                isFirefox
+                  ? 'Firefox'
+                  : 'Chrome/Chromium',
+            },
+          }
+        );
+
+      logU1ConversionError(
+        normalizedError,
+        diagnostics
+      );
+
+      try {
+        _lastErrorReportText =
+          buildU1ErrorReportText(
+            normalizedError,
+            diagnostics
+          );
+      } catch (reportError) {
+        _lastErrorReportText =
+          '';
+
+        console.warn(
+          '[U1 Extension] Could not build the copy-ready error report:',
+          reportError
+        );
+      }
+
+      _resultState =
+        'error';
+
+      setConvertButtonState(
+        btn,
+        _resultState
+      );
+
+      try {
+        await showU1ErrorDropdown(
+          normalizedError,
+          diagnostics
+        );
+      } catch (dropdownError) {
+        console.warn(
+          '[U1 Extension] Could not display the error dropdown:',
+          dropdownError
+        );
+      }
     } finally {
-      isConverting       = false;
-      _bypassInterceptor = false;
+      isConverting =
+        false;
+
+      _bypassInterceptor =
+        false;
+
+      // MakerWorld may replace or rerender the primary button while its own
+      // download request is running. MutationObserver updates are intentionally
+      // ignored during conversion, so enforce the final U1 state once more now.
+      updateButton();
     }
   }
 
@@ -557,8 +1354,59 @@ function createButtonIconSvg(state) {
         reject(new Error('Download timed out — try again'));
       }, 30000);
 
-      function onFile(e) { clearTimeout(timer); cleanup(); resolve(e.detail); }
-      function onErr(e)  { clearTimeout(timer); cleanup(); reject(new Error(`Download error: ${e.detail}`)); }
+      function onFile(e) {
+        clearTimeout(timer);
+        cleanup();
+
+        const detail =
+          e.detail;
+
+        if (
+          typeof detail === 'string'
+        ) {
+          try {
+            const parsed =
+              JSON.parse(detail);
+
+            if (
+              parsed &&
+              typeof parsed === 'object'
+            ) {
+              resolve({
+                blobUrl:
+                  parsed.blobUrl || '',
+
+                requestUrl:
+                  parsed.requestUrl || '',
+              });
+
+              return;
+            }
+          } catch {
+            // Older injected.js versions supplied the blob URL directly.
+          }
+        }
+
+        resolve({
+          blobUrl:
+            String(detail || ''),
+
+          requestUrl:
+            '',
+        });
+      }
+
+      function onErr(e) {
+        clearTimeout(timer);
+        cleanup();
+
+        reject(
+          new Error(
+            `Download error: ${e.detail}`
+          )
+        );
+      }
+      
       function cleanup() {
         window.removeEventListener('__u1_3mf',     onFile);
         window.removeEventListener('__u1_3mf_err', onErr);
@@ -603,64 +1451,864 @@ function createButtonIconSvg(state) {
     return null;
   }
 
-  async function clickNativeDownload() {
-    const btn = findButton();
-    if (!btn) throw new Error('Primary button not found');
+  function findVisibleMakerWorldDropdown() {
+    // First try the known MakerWorld / Material UI popup containers.
+    const knownPopup =
+      Array.from(
+        document.querySelectorAll(
+          [
+            '.MuiPopper-root',
+            '.MuiPopover-root',
+            '.MuiMenu-root',
+            '[role="tooltip"]',
+            '[role="menu"]',
+            '[role="listbox"]',
+          ].join(', ')
+        )
+      ).find(popover => {
+        if (!isVisible(popover)) return false;
 
-    const arrow = findDropdownArrow(btn);
-    const clickTarget = arrow || btn;
+        if (
+          popover.hasAttribute(
+            'data-u1-error-dropdown'
+          )
+        ) {
+          return true;
+        }
 
-    _bypassInterceptor = true;
-    clickTarget.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-    _bypassInterceptor = false;
+        const text =
+          String(
+            popover.textContent || ''
+          );
 
-    const item = await poll(findVisibleDownloadItem, 5000);
-    if (!item) {
-      throw new Error('Could not find the 3MF download option');
+        return /\b3mf\b/i.test(text);
+      });
+
+    if (knownPopup) {
+      return knownPopup;
     }
-    console.log('[U1 Extension] clicking:', item.textContent.trim().slice(0, 40));
-    item.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-  }
 
-  function findVisibleDownloadItem() {
-    // "3MF" is language-independent, unlike labels such as
-    // "Download", "herunterladen", "scaricare" or "télécharger".
-    const normalize = t => (t || '').trim().replace(/\s+/g, ' ');
-
-    const isDownload3mf = t => {
-      t = normalize(t);
-
-      return (
-        /\b3mf\b/i.test(t) &&
-        t.length < 60
+    // Fallback for MakerWorld DOM variants whose popup container has no
+    // stable Material UI class or ARIA role.
+    //
+    // Search only for visible 3MF elements outside the primary button so the
+    // main "Download 3MF" button can never be mistaken for a dropdown item.
+    const candidates =
+      document.querySelectorAll(
+        [
+          'li',
+          'button',
+          'a',
+          'div',
+          'span',
+          '[role="menuitem"]',
+          '[role="option"]',
+        ].join(', ')
       );
-    };
 
-    for (const el of document.querySelectorAll(
-      'li, button, a, div, span, [role="menuitem"], [role="option"]'
-    )) {
-      if (!isVisible(el)) continue;
-      if (isDownload3mf(el.textContent)) return el;
-    }
+    for (const element of candidates) {
+      if (!isVisible(element)) continue;
 
-    const walker = document.createTreeWalker(
-      document.body,
-      NodeFilter.SHOW_TEXT
-    );
+      if (
+        element.closest(
+          'span.primaryButton'
+        )
+      ) {
+        continue;
+      }
 
-    let node;
+      if (
+        !isMakerWorld3mfText(
+          element.textContent
+        )
+      ) {
+        continue;
+      }
 
-    while ((node = walker.nextNode())) {
-      if (!isDownload3mf(node.textContent)) continue;
+      // Prefer a real popup ancestor when one exists.
+      const popup =
+        element.closest(
+          [
+            '.MuiPopper-root',
+            '.MuiPopover-root',
+            '.MuiMenu-root',
+            '[role="tooltip"]',
+            '[role="menu"]',
+            '[role="listbox"]',
+          ].join(', ')
+        );
 
-      const parent = node.parentElement;
+      if (
+        popup &&
+        isVisible(popup)
+      ) {
+        return popup;
+      }
 
-      if (parent && isVisible(parent)) {
-        return parent;
+      // Otherwise use the direct menu container around the detected item.
+      const container =
+        element.parentElement;
+
+      if (
+        container &&
+        isVisible(container)
+      ) {
+        return container;
       }
     }
 
     return null;
+  }
+
+  function isMakerWorldDropdownOpen() {
+    return Boolean(
+      findVisibleMakerWorldDropdown()
+    );
+  }
+
+  function dispatchMakerWorldClick(target) {
+    if (!target) return;
+
+    _bypassInterceptor = true;
+    _dropdownUiBusy = true;
+
+    try {
+      target.dispatchEvent(
+        new MouseEvent(
+          'click',
+          {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+          }
+        )
+      );
+    } finally {
+      _bypassInterceptor = false;
+
+      queueMicrotask(() => {
+        _dropdownUiBusy = false;
+      });
+    }
+  }
+
+  async function openMakerWorldDropdown(btn) {
+    const existing =
+      findVisibleMakerWorldDropdown();
+
+    if (existing) return existing;
+
+    const arrow =
+      findDropdownArrow(btn);
+
+    if (!arrow) {
+      throw new Error(
+        'MakerWorld dropdown arrow not found'
+      );
+    }
+
+    dispatchMakerWorldClick(arrow);
+
+    const dropdown =
+      await poll(
+        findVisibleMakerWorldDropdown,
+        2000
+      );
+
+    if (!dropdown) {
+      throw new Error(
+        'MakerWorld dropdown did not open'
+      );
+    }
+
+    return dropdown;
+  }
+
+  async function closeMakerWorldDropdown(btn = findButton()) {
+    if (!isMakerWorldDropdownOpen()) return;
+
+    const arrow =
+      findDropdownArrow(btn);
+
+    if (!arrow) return;
+
+    dispatchMakerWorldClick(arrow);
+
+    await poll(
+      () =>
+        !isMakerWorldDropdownOpen()
+          ? true
+          : null,
+      1000
+    );
+  }
+
+  function getMakerWorldActionSnapshot() {
+    let value = null;
+    let existed = false;
+
+    try {
+      existed =
+        localStorage.getItem(
+          MAKERWORLD_ACTION_STORAGE_KEY
+        ) !== null;
+
+      value =
+        localStorage.getItem(
+          MAKERWORLD_ACTION_STORAGE_KEY
+        );
+    } catch (error) {
+      console.warn(
+        '[U1 Extension] Could not read MakerWorld action preference:',
+        error
+      );
+    }
+
+    return {
+      existed,
+      value,
+    };
+  }
+
+  function restoreMakerWorldAction(snapshot) {
+    if (!snapshot) return;
+
+    try {
+      if (snapshot.existed) {
+        localStorage.setItem(
+          MAKERWORLD_ACTION_STORAGE_KEY,
+          String(snapshot.value || '')
+        );
+      } else {
+        localStorage.removeItem(
+          MAKERWORLD_ACTION_STORAGE_KEY
+        );
+      }
+    } catch (error) {
+      console.warn(
+        '[U1 Extension] Could not restore MakerWorld action preference:',
+        error
+      );
+    }
+  }
+
+  function normalizeMakerWorldMenuText(text) {
+    return String(text || '')
+      .trim()
+      .replace(/\s+/g, ' ');
+  }
+
+  function isMakerWorld3mfText(text) {
+    const normalized =
+      normalizeMakerWorldMenuText(text);
+
+    return (
+      /\b3mf\b/i.test(normalized) &&
+      normalized.length < 60
+    );
+  }
+
+  function findVisibleDownloadItem(dropdown = findVisibleMakerWorldDropdown()) {
+    if (!dropdown) return null;
+
+    const candidates =
+      dropdown.querySelectorAll(
+        'li, button, a, div, span, [role="menuitem"], [role="option"]'
+      );
+
+    for (const element of candidates) {
+      if (!isVisible(element)) continue;
+      if (!isMakerWorld3mfText(element.textContent)) continue;
+
+      const childWithSameText =
+        Array.from(element.children || [])
+          .some(child =>
+            isVisible(child) &&
+            isMakerWorld3mfText(child.textContent)
+          );
+
+      if (!childWithSameText) {
+        return element;
+      }
+    }
+
+    return null;
+  }
+
+  function findMakerWorldMenuEntries(dropdown) {
+    const downloadItem =
+      findVisibleDownloadItem(dropdown);
+
+    if (!downloadItem) return [];
+
+    const container =
+      downloadItem.parentElement;
+
+    if (!container) return [];
+
+    const entries =
+      Array.from(container.children)
+        .filter(isVisible);
+
+    return entries.length >= 3
+      ? entries.slice(0, 3)
+      : [];
+  }
+
+  function saveMenuEntryContents(entries) {
+    return entries.map(entry => ({
+      entry,
+      childNodes:
+        Array.from(entry.childNodes)
+          .map(node => node.cloneNode(true)),
+      dataU1ErrorMenu:
+        entry.getAttribute(
+          'data-u1-error-menu'
+        ),
+    }));
+  }
+
+  function restoreSavedMenuEntryContents(savedEntries) {
+    for (const saved of savedEntries || []) {
+      const entry = saved.entry;
+
+      if (!entry?.isConnected) continue;
+
+      entry.replaceChildren(
+        ...saved.childNodes.map(
+          node => node.cloneNode(true)
+        )
+      );
+
+      if (saved.dataU1ErrorMenu === null) {
+        entry.removeAttribute(
+          'data-u1-error-menu'
+        );
+      } else {
+        entry.setAttribute(
+          'data-u1-error-menu',
+          saved.dataU1ErrorMenu
+        );
+      }
+    }
+  }
+
+  function createErrorMenuContent(
+    label,
+    value,
+    {
+      singleLine = false,
+      textColor = '',
+    } = {}
+  ) {
+    const wrapper =
+      document.createElement('div');
+
+    wrapper.style.display =
+      'flex';
+
+    wrapper.style.flexDirection =
+      'column';
+
+    wrapper.style.gap =
+      '2px';
+
+    wrapper.style.width =
+      '100%';
+
+    wrapper.style.minWidth =
+      '0';
+
+    if (textColor) {
+      wrapper.style.color =
+        textColor;
+    }
+
+    const heading =
+      document.createElement('span');
+
+    heading.textContent =
+      label;
+
+    heading.style.fontSize =
+      '12px';
+
+    heading.style.fontWeight =
+      '600';
+
+    heading.style.opacity =
+      '0.72';
+
+    heading.style.whiteSpace =
+      'nowrap';
+
+    const text =
+      document.createElement('span');
+
+    text.textContent =
+      value;
+
+    text.style.lineHeight =
+      '1.35';
+
+    text.style.minWidth =
+      '0';
+
+    if (singleLine) {
+      text.style.whiteSpace =
+        'nowrap';
+
+      text.style.overflow =
+        'hidden';
+
+      text.style.textOverflow =
+        'ellipsis';
+
+      text.title =
+        value;
+    } else {
+      text.style.whiteSpace =
+        'normal';
+    }
+
+    wrapper.append(
+      heading,
+      text
+    );
+
+    return wrapper;
+  }
+
+  async function copyU1ErrorReport() {
+    if (!_lastErrorReportText) return false;
+
+    try {
+      await navigator.clipboard.writeText(
+        _lastErrorReportText
+      );
+
+      return true;
+    } catch {
+      const textarea =
+        document.createElement('textarea');
+
+      textarea.value =
+        _lastErrorReportText;
+
+      textarea.setAttribute(
+        'readonly',
+        ''
+      );
+
+      textarea.style.position =
+        'fixed';
+
+      textarea.style.opacity =
+        '0';
+
+      document.body.appendChild(
+        textarea
+      );
+
+      textarea.select();
+
+      let copied = false;
+
+      try {
+        copied =
+          document.execCommand('copy');
+      } finally {
+        textarea.remove();
+      }
+
+      return copied;
+    }
+  }
+
+  async function showU1ErrorDropdown(
+    error,
+    diagnostics
+  ) {
+    const btn =
+      findButton();
+
+    if (!btn) return;
+
+    await resetU1ErrorDropdown({
+      closeDropdown: false,
+    });
+
+    // The native MakerWorld dropdown may still be playing its closing
+    // animation when an early conversion error occurs.
+    //
+    // Never replace the contents of that closing dropdown. Otherwise
+    // MakerWorld finishes the animation afterwards and immediately hides
+    // the error information we just inserted.
+    if (
+      findVisibleMakerWorldDropdown()
+    ) {
+      const closedNaturally =
+        await poll(
+          () =>
+            !isMakerWorldDropdownOpen()
+              ? true
+              : null,
+          3500
+        );
+
+      // A manually opened dropdown may not be closing at all. In that case,
+      // close it once deliberately and wait until it is really gone.
+      if (
+        !closedNaturally &&
+        isMakerWorldDropdownOpen()
+      ) {
+        await closeMakerWorldDropdown(
+          btn
+        );
+
+        await poll(
+          () =>
+            !isMakerWorldDropdownOpen()
+              ? true
+              : null,
+          3000
+        );
+      }
+
+      // Let Material UI finish removing or detaching the old popup before
+      // requesting a fresh one for the error display.
+      await new Promise(
+        resolve =>
+          setTimeout(
+            resolve,
+            100
+          )
+      );
+    }
+
+    let dropdown;
+
+    try {
+      dropdown =
+        await openMakerWorldDropdown(btn);
+    } catch (openError) {
+      console.warn(
+        '[U1 Extension] Could not open error dropdown:',
+        openError
+      );
+
+      return;
+    }
+
+    const entries =
+      findMakerWorldMenuEntries(dropdown);
+
+    if (entries.length < 3) {
+      console.warn(
+        '[U1 Extension] MakerWorld dropdown entries could not be identified.'
+      );
+
+      return;
+    }
+
+    const code =
+      String(
+        error?.code ||
+        U1_ERROR_CODES.UNKNOWN
+      );
+
+    const stage =
+      String(
+        getU1DiagnosticStageLabel(
+          error?.stage ||
+          diagnostics?.currentStage
+        )
+      );
+
+    let suggestion =
+      String(
+        error?.userAction ||
+        'Try the conversion again.'
+      );
+
+    // MakerWorld returns HTTP 418 when a CAPTCHA challenge must be completed.
+    // Show a dedicated user-friendly instruction instead of the generic retry
+    // message.
+    if (
+      code === 'U1-DL-001' &&
+      /\b418\b/.test(
+        String(
+          error?.originalMessage ||
+          error?.message ||
+          ''
+        )
+      )
+    ) {
+      suggestion =
+        'Complete the MakerWorld CAPTCHA and try again.';
+    }
+
+    const savedEntries =
+      saveMenuEntryContents(entries);
+
+    // The first native MakerWorld entry can represent the currently selected
+    // action and may therefore inherit a special or invisible text color.
+    // Use the color of a normal visible menu entry for all temporary U1 rows.
+    const menuTextColor =
+      window.getComputedStyle(
+        entries[1] ||
+        entries[0] ||
+        dropdown
+      ).color;
+
+    const previousDropdownMarker =
+      dropdown.getAttribute(
+        'data-u1-error-dropdown'
+      );
+
+    dropdown.setAttribute(
+      'data-u1-error-dropdown',
+      '1'
+    );
+
+    const reportClickHandler =
+      async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        const copied =
+          await copyU1ErrorReport();
+
+        const value =
+          entries[2].querySelector(
+            '[data-u1-report-value]'
+          );
+
+        if (value) {
+          value.textContent =
+            copied
+              ? 'Error report copied'
+              : 'Copy failed — use console report';
+        }
+      };
+
+    entries.forEach(entry => {
+      entry.setAttribute(
+        'data-u1-error-menu',
+        '1'
+      );
+    });
+
+    entries[0].replaceChildren(
+      createErrorMenuContent(
+        'Error',
+        `${code} · ${stage}`,
+        {
+          singleLine:
+            true,
+
+          textColor:
+            menuTextColor,
+        }
+      )
+    );
+
+    entries[1].replaceChildren(
+      createErrorMenuContent(
+        'Suggestion',
+        suggestion,
+        {
+          singleLine:
+            true,
+
+          textColor:
+            menuTextColor,
+        }
+      )
+    );
+
+    const reportContent =
+      createErrorMenuContent(
+        'Report',
+        'Click to copy the error report',
+        {
+          singleLine:
+            true,
+
+          textColor:
+            menuTextColor,
+        }
+      );
+    reportContent.lastElementChild
+      ?.setAttribute(
+        'data-u1-report-value',
+        '1'
+      );
+
+    entries[2].replaceChildren(
+      reportContent
+    );
+
+    entries[2].addEventListener(
+      'click',
+      reportClickHandler,
+      true
+    );
+
+    _errorDropdownState = {
+      dropdown,
+      previousDropdownMarker,
+      savedEntries,
+      reportEntry:
+        entries[2],
+      reportClickHandler,
+    };
+  }
+
+  async function resetU1ErrorDropdown({
+    closeDropdown = false,
+  } = {}) {
+    const state =
+      _errorDropdownState;
+
+    _errorDropdownState =
+      null;
+
+    if (state) {
+      state.reportEntry
+        ?.removeEventListener(
+          'click',
+          state.reportClickHandler,
+          true
+        );
+
+      restoreSavedMenuEntryContents(
+        state.savedEntries
+      );
+
+      if (state.dropdown?.isConnected) {
+        if (
+          state.previousDropdownMarker ===
+          null
+        ) {
+          state.dropdown.removeAttribute(
+            'data-u1-error-dropdown'
+          );
+        } else {
+          state.dropdown.setAttribute(
+            'data-u1-error-dropdown',
+            state.previousDropdownMarker
+          );
+        }
+      }
+    }
+
+    if (closeDropdown) {
+      await closeMakerWorldDropdown();
+    }
+  }
+
+  async function clickNativeDownload() {
+    const btn = findButton();
+
+    if (!btn) {
+      throw new Error(
+        'Primary button not found'
+      );
+    }
+
+    const actionSnapshot =
+      getMakerWorldActionSnapshot();
+
+    try {
+      // Use the main button directly when MakerWorld was already configured
+      // for 3MF before this conversion, or when this page previously selected
+      // the 3MF menu item during an earlier conversion.
+      //
+      // The second case is important because MakerWorld keeps the action in
+      // its current React state even though we restore localStorage so the
+      // user's persisted preference remains unchanged after a reload.
+      if (
+        actionSnapshot.value ===
+          MAKERWORLD_DOWNLOAD_3MF_ACTION ||
+        _makerWorld3mfSelectedForPage
+      ) {
+        dispatchMakerWorldClick(
+          btn
+        );
+
+        return;
+      }
+
+      // Reuse an already open dropdown instead of closing and reopening it.
+      const dropdown =
+        findVisibleMakerWorldDropdown() ||
+        await openMakerWorldDropdown(
+          btn
+        );
+
+      const item =
+        await poll(
+          () =>
+            findVisibleDownloadItem(
+              dropdown
+            ),
+          5000
+        );
+
+      if (!item) {
+        throw new Error(
+          'Could not find the 3MF download option'
+        );
+      }
+
+      console.log(
+        '[U1 Extension] clicking:',
+        item.textContent
+          .trim()
+          .slice(0, 40)
+      );
+
+      dispatchMakerWorldClick(
+        item
+      );
+
+      // MakerWorld now keeps 3MF as the current action in its in-memory page
+      // state. The persisted localStorage value is still restored below.
+      _makerWorld3mfSelectedForPage =
+        true;
+
+      // Give MakerWorld enough time to close the dropdown itself after the
+      // 3MF menu item was selected.
+      const dropdownClosedNaturally =
+        await poll(
+          () =>
+            !isMakerWorldDropdownOpen()
+              ? true
+              : null,
+          1000
+        );
+
+      // Synthetic clicks do not always trigger MakerWorld's own menu-closing
+      // logic. Only toggle the arrow when the dropdown is still demonstrably
+      // open after the waiting period.
+      //
+      // The additional live check prevents reopening a dropdown which closed
+      // immediately after the poll timed out.
+      if (
+        !dropdownClosedNaturally &&
+        isMakerWorldDropdownOpen()
+      ) {
+        await closeMakerWorldDropdown(
+          btn
+        );
+      }
+    } finally {
+      restoreMakerWorldAction(
+        actionSnapshot
+      );
+    }
   }
 
   function isVisible(el) {
@@ -768,6 +2416,10 @@ function createButtonIconSvg(state) {
 
     lastPath = location.pathname;
     injectedSlide = null;
+
+    _makerWorld3mfSelectedForPage =
+      false;
+
     setU1Mode(false);
 
     if (!location.pathname.includes('/models/')) return;

@@ -1,4 +1,10 @@
 // Extension settings page — in-browser conversion (no external service required)
+//
+// Internal development-build switch.
+//
+// This is unrelated to Chrome's extension developer mode.
+// Set it to false before creating a public release build.
+const ENABLE_U1_FAULT_SIMULATION = false;
 
 const DEFAULTS = {
   printProfileMode:      'preserve',
@@ -15,6 +21,8 @@ const DEFAULTS = {
   deepDebugReport:       false,
   smartProcessMerge:    true,
   strictProcessMerge:   false,
+
+  u1TestFault:           'none',
 };
 
 let customPrinterProfiles = {};
@@ -424,8 +432,11 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     fixMultiPlatePositioning: document.getElementById('fixMultiPlatePositioning')?.checked ?? true,
     debugReport:           document.getElementById('debugReport')?.checked ?? true,
     deepDebugReport:       document.getElementById('deepDebugReport')?.checked ?? false,
-    smartProcessMerge:    document.getElementById('smartProcessMerge')?.checked ?? true,
-    strictProcessMerge:   document.getElementById('strictProcessMerge')?.checked ?? false,
+    smartProcessMerge:     document.getElementById('smartProcessMerge')?.checked ?? true,
+    strictProcessMerge:    document.getElementById('strictProcessMerge')?.checked ?? false,
+    u1TestFault:           ENABLE_U1_FAULT_SIMULATION
+      ? document.getElementById('u1TestFault')?.value || 'none'
+      : 'none',
   };
 
   await setSyncStorage(settings);
@@ -497,6 +508,53 @@ document.getElementById('printProfileModeForce')?.addEventListener('change', upd
 (async function initOptionsPage() {
   const s = await getSyncStorage(DEFAULTS);
   const printProfileMode = s.printProfileMode || 'preserve';
+
+  const faultSimulationSection =
+    document.getElementById(
+      'u1FaultSimulationSection'
+    );
+
+  const testFaultSelect =
+    document.getElementById(
+      'u1TestFault'
+    );
+
+  if (ENABLE_U1_FAULT_SIMULATION === true) {
+    if (faultSimulationSection) {
+      faultSimulationSection.style.display =
+        'block';
+    }
+
+    if (testFaultSelect) {
+      testFaultSelect.value =
+        s.u1TestFault || 'none';
+
+      // Unknown or removed fault ids must never remain selected.
+      if (!testFaultSelect.value) {
+        testFaultSelect.value =
+          'none';
+      }
+    }
+  } else {
+    if (faultSimulationSection) {
+      faultSimulationSection.style.display =
+        'none';
+    }
+
+    // Remove a value that may remain from a local development build.
+    if (
+      s.u1TestFault &&
+      s.u1TestFault !== 'none'
+    ) {
+      await setSyncStorage({
+        u1TestFault:
+          'none',
+      });
+
+      s.u1TestFault =
+        'none';
+    }
+  }
 
   document.getElementById('printProfileModePreserve').checked =
     printProfileMode !== 'force';

@@ -124,6 +124,25 @@ This prevents preserved project filaments from silently falling back to unrelate
 
 ---
 
+### Conversion error reporting
+
+<img src="screenshots/error.png" alt="Conversion Error" width="650">
+
+If a conversion fails, the extension displays a detailed error message directly inside MakerWorld instead of only reporting that the conversion failed.
+
+The error panel includes:
+
+- A unique error code
+- The conversion stage where the error occurred
+- A suggested action to help resolve the problem
+- A one-click **Error Report** button that copies a complete diagnostic report to the clipboard
+
+<img src="screenshots/report_copy.png" alt="Copied Error Report" width="650">
+
+The copied report contains all technical information required for bug reports, making it much easier to identify and resolve conversion problems.
+
+---
+
 ## Converter Settings
 
 ![Converter Settings](screenshots/settings1.png)

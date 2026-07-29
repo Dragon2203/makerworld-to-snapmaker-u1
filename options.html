@@ -455,6 +455,86 @@
   </div>
 </section>
 
+<section id="u1FaultSimulationSection" style="display:none">
+  <h2>Developer Tools</h2>
+
+  <div class="option-row">
+    <label>
+      <span style="min-width:200px">
+        Simulate next conversion error
+      </span>
+
+      <select id="u1TestFault">
+        <option value="none">
+          None
+        </option>
+
+        <option value="download-timeout">
+          MakerWorld download timeout
+        </option>
+
+        <option value="captured-response-failure">
+          Captured response failure
+        </option>
+
+        <option value="cdn-download-failure">
+          MakerWorld CDN download failure
+        </option>
+
+        <option value="storage-unavailable">
+          Extension storage unavailable
+        </option>
+
+        <option value="profile-load-failure">
+          Printer profile load failure
+        </option>
+
+        <option value="invalid-zip">
+          Invalid source ZIP
+        </option>
+
+        <option value="project-parse-failure">
+          Project parse failure
+        </option>
+
+        <option value="project-build-failure">
+          Project build failure
+        </option>
+
+        <option value="metadata-rewrite-failure">
+          Metadata rewrite failure
+        </option>
+
+        <option value="zip-copy-failure">
+          Output ZIP entry copy failure
+        </option>
+
+        <option value="zip-build-failure">
+          Output ZIP generation failure
+        </option>
+
+        <option value="project-report-failure">
+          Conversion report failure
+        </option>
+
+        <option value="output-download-failure">
+          Converted file download failure
+        </option>
+      </select>
+    </label>
+
+    <p class="hint">
+      The selected error is injected into the next conversion only.
+      It is reset to “None” immediately when that conversion starts.
+    </p>
+
+    <p class="hint">
+      Simulated errors are marked as simulated in the U1 error report.
+      They do not modify the original MakerWorld file.
+    </p>
+  </div>
+</section>
+
 <div class="save-row">
   <button class="btn-primary" id="saveBtn">Save</button>
   <span id="saveStatus"></span>

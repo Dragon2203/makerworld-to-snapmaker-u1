@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MakerWorld to Snapmaker U1",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "browser_specific_settings": {
     "gecko": {
       "id": "makerworld-to-snapmaker-u1@dragon2203",
@@ -42,6 +42,7 @@
         "u1_3mf_metadata.js",
         "u1_project_report.js",
         "converter.js",
+        "u1_error_report.js",
         "content.js"
       ],
       "run_at": "document_idle"

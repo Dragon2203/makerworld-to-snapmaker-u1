@@ -24,7 +24,20 @@ window.fetch = function (url, opts) {
         new Blob([buffer], { type: 'application/octet-stream' })
       );
       console.log('[U1 injected] dispatching __u1_3mf');
-      window.dispatchEvent(new CustomEvent('__u1_3mf', { detail: blobUrl }));
+
+      window.dispatchEvent(
+        new CustomEvent(
+          '__u1_3mf',
+          {
+            detail:
+              JSON.stringify({
+                blobUrl,
+                requestUrl:
+                  String(url || ''),
+              }),
+          }
+        )
+      );
     }).catch((err) => {
       console.error('[U1 injected] capture error:', err);
       window.dispatchEvent(new CustomEvent('__u1_3mf_err', { detail: err.message }));

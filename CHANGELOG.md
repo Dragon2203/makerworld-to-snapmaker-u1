@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
+## [1.5.0] - 2026-07-29
+
+### Added
+
+- Added a built-in conversion error system with stable error codes and troubleshooting suggestions.
+- Added an integrated error report that can be copied directly to the clipboard with a single click.
+- Added detailed diagnostic reports in the browser console to simplify troubleshooting and bug reporting.
+
+### Improved
+
+- Improved conversion button alignment and text centering.
+- Improved handling of repeated conversions by automatically closing open status panels before starting a new conversion.
+- The original MakerWorld "Open in Bambu Studio" / "Download 3MF" button is now preserved and restored after each conversion.
+
+### Fixed
+
+- Fixed several button state restoration edge cases after completed conversions.
+- Fixed multiple UI issues that could leave outdated status information visible after starting another conversion.
+
 ## [1.4.1] - 2026-07-23
 
 ### Improved
