@@ -718,6 +718,113 @@ function logU1PerformanceReport(
   console.groupEnd();
 }
 
+function logU1OutputDownloadReport(
+  downloadReport
+) {
+  if (!downloadReport) return;
+
+  const attempts =
+    Array.isArray(
+      downloadReport.attempts
+    )
+      ? downloadReport.attempts
+      : [];
+
+  console.groupCollapsed(
+    '[U1 Project Report] output download'
+  );
+
+  console.log('summary:', {
+    browser:
+      downloadReport.browser ||
+      null,
+
+    success:
+      downloadReport.success ===
+      true,
+
+    originalFilename:
+      downloadReport.originalFilename ||
+      null,
+
+    fallbackAvailable:
+      downloadReport.fallbackAvailable ===
+      true,
+
+    fallbackUsed:
+      downloadReport.fallbackUsed ===
+      true,
+
+    fallbackFilename:
+      downloadReport.fallbackFilename ||
+      null,
+
+    finalFilename:
+      downloadReport.finalFilename ||
+      null,
+
+    failedAttempt:
+      downloadReport.failedAttempt ||
+      null,
+
+    downloadAttempts:
+      attempts.length,
+  });
+
+  if (attempts.length) {
+    console.table(
+      attempts.map(
+        attempt => ({
+          attempt:
+            attempt.attempt,
+
+          type:
+            attempt.type,
+
+          filename:
+            attempt.filename,
+
+          result:
+            attempt.result,
+
+          error:
+            attempt.error,
+
+          downloadId:
+            attempt.downloadId,
+        })
+      )
+    );
+  }
+
+  if (
+    downloadReport.fallbackUsed ===
+    true
+  ) {
+    console.log(
+      'filename normalization:',
+      {
+        reason:
+          'The browser rejected the original filename as invalid.',
+
+        original:
+          downloadReport.originalFilename ||
+          null,
+
+        normalized:
+          downloadReport.fallbackFilename ||
+          null,
+
+        final:
+          downloadReport.finalFilename ||
+          null,
+      }
+    );
+  }
+
+  console.groupEnd();
+}
+
 function formatConverterOptionsForReport(options = {}) {
   const out = {};
 

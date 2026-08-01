@@ -92,7 +92,73 @@ function buildU1ErrorReportObject(
     ...sanitizeU1DiagnosticContext(
       error.context
     ),
-  };
+    };
+  const metadata =
+    sanitizeU1DiagnosticContext(
+      diagnostics.metadata
+    );
+
+  const filenameHandlingRelevant =
+    Boolean(
+      context.originalFilename ||
+      context.fallbackFilename ||
+      context.downloadAttempts ||
+      metadata.outputDownloadOriginalFilename ||
+      metadata.outputDownloadFallbackFilename ||
+      metadata.outputDownloadAttempts
+    );
+
+  const filenameHandling =
+    filenameHandlingRelevant
+      ? {
+          originalFilename:
+            context.originalFilename ||
+            metadata.outputDownloadOriginalFilename ||
+            null,
+
+          fallbackFilename:
+            context.fallbackFilename ||
+            metadata.outputDownloadFallbackFilename ||
+            null,
+
+          finalFilename:
+            context.finalFilename ||
+            metadata.outputDownloadFinalFilename ||
+            null,
+
+          fallbackAvailable:
+            context.filenameFallbackAvailable ??
+            metadata.outputDownloadFallbackAvailable ??
+            false,
+
+          fallbackUsed:
+            context.filenameFallbackUsed ??
+            metadata.outputDownloadFallbackUsed ??
+            false,
+
+          normalizationChanged:
+            context.filenameNormalizationChanged ??
+            Boolean(
+              metadata.outputDownloadFallbackFilename
+            ),
+
+          failedAttempt:
+            context.failedAttempt ||
+            metadata.outputDownloadFailedAttempt ||
+            null,
+
+          attempts:
+            Array.isArray(
+              context.downloadAttempts
+            )
+              ? context.downloadAttempts
+              : Array.isArray(
+                  metadata.outputDownloadAttempts
+                )
+                ? metadata.outputDownloadAttempts
+                : [],
+        }
+      : null;
 
   return {
     summary: {
@@ -168,10 +234,9 @@ function buildU1ErrorReportObject(
         ? context
         : null,
 
-    metadata:
-      sanitizeU1DiagnosticContext(
-        diagnostics.metadata
-      ),
+    filenameHandling,
+
+    metadata,
 
     originalError: {
       name:
@@ -274,6 +339,91 @@ function buildU1ErrorReportText(
             : ''
         )
       );
+    }
+  }
+
+  if (report.filenameHandling) {
+    const filenameHandling =
+      report.filenameHandling;
+
+    lines.push(
+      '',
+      'Output filename handling:',
+      `Original filename: ${
+        filenameHandling.originalFilename ||
+        'unknown'
+      }`,
+      `Fallback available: ${
+        filenameHandling.fallbackAvailable
+          ? 'yes'
+          : 'no'
+      }`,
+      `Fallback used: ${
+        filenameHandling.fallbackUsed
+          ? 'yes'
+          : 'no'
+      }`
+    );
+
+    if (
+      filenameHandling.fallbackFilename
+    ) {
+      lines.push(
+        `Fallback filename: ${filenameHandling.fallbackFilename}`
+      );
+    }
+
+    if (
+      filenameHandling.finalFilename
+    ) {
+      lines.push(
+        `Final attempted filename: ${filenameHandling.finalFilename}`
+      );
+    }
+
+    if (
+      filenameHandling.failedAttempt
+    ) {
+      lines.push(
+        `Failed attempt: ${filenameHandling.failedAttempt}`
+      );
+    }
+
+    if (
+      filenameHandling.attempts.length
+    ) {
+      lines.push(
+        '',
+        'Download attempts:'
+      );
+
+      for (
+        const attempt of
+        filenameHandling.attempts
+      ) {
+        const result =
+          String(
+            attempt.result ||
+            'unknown'
+          ).toUpperCase();
+
+        lines.push(
+          `[${result}] Attempt ${
+            attempt.attempt ??
+            '?'
+          } · ${
+            attempt.type ||
+            'unknown'
+          } · ${
+            attempt.filename ||
+            'unknown filename'
+          }${
+            attempt.error
+              ? ` · ${attempt.error}`
+              : ''
+          }`
+        );
+      }
     }
   }
 
@@ -393,6 +543,23 @@ function logU1ConversionError(
     console.table(
       report.progress
     );
+  }
+
+  if (report.filenameHandling) {
+    console.log(
+      'output filename handling:',
+      report.filenameHandling
+    );
+
+    if (
+      report.filenameHandling
+        .attempts?.length
+    ) {
+      console.table(
+        report.filenameHandling
+          .attempts
+      );
+    }
   }
 
   if (report.operation) {

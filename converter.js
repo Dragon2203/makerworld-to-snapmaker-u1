@@ -243,7 +243,7 @@ const U1_STAGE_ERROR_DEFAULTS = Object.freeze({
       'The converted file was created, but its download could not be started.',
 
     userAction:
-      'The conversion may have completed. Check your Downloads.',
+      'Copy the error report and include it when reporting the download problem.',
 
     buttonText:
       'Download failed',

@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
+## [1.5.1] - 2026-08-01
+
+### Added
+- Official extension logo
+
+### Improved
+
+- Improved download filename compatibility by automatically retrying downloads with a normalized filename if the browser rejects the original filename as invalid, while preserving the original filename whenever possible.
+- Improved download diagnostics by recording both the original and normalized filename attempts in the Project Report and Error Report to simplify troubleshooting.
+
+### Fixed
+
+- Fixed converted file downloads failing for certain Unicode filenames that could be rejected by the browser as `Invalid filename`.
+
 ## [1.5.0] - 2026-07-29
 
 ### Added

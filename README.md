@@ -1,3 +1,5 @@
+![MakerWorld to Snapmaker U1](screenshots/logo.png)
+
 # MakerWorld to Snapmaker U1
 
 Convert MakerWorld print profiles into native Snapmaker U1 projects with a single click.
