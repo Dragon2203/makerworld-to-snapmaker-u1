@@ -26,7 +26,10 @@
   }
 },
   "permissions": ["downloads", "storage"],
-  "host_permissions": ["https://makerworld.com/*"],
+  "host_permissions": [
+    "https://makerworld.com/*",
+    "https://makerworld.com.cn/*"
+  ],
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true
@@ -38,7 +41,10 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://makerworld.com/*"],
+      "matches": [
+        "https://makerworld.com/*",
+        "https://makerworld.com.cn/*"
+      ],
       "js": [
         "lib/jszip.min.js",
 
@@ -63,7 +69,10 @@
   "web_accessible_resources": [
     {
       "resources": ["assets/*", "assets/profiles/*", "injected.js"],
-      "matches": ["https://makerworld.com/*"]
+      "matches": [
+        "https://makerworld.com/*",
+        "https://makerworld.com.cn/*"
+      ]
     }
   ]
 }
