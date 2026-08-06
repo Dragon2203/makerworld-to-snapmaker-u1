@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
+## [1.5.3] - 2026-08-06
+
+### Added
+- Added support for MakerWorld China (`makerworld.com.cn`).
+
 ## [1.5.2] - 2026-08-06
 
 ### Fixed
