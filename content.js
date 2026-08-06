@@ -631,8 +631,230 @@ function createButtonIconSvg(state) {
   (document.head || document.documentElement).appendChild(script);
 
   // ── Button UI ─────────────────────────────────────────────────────────────────
+
+  function getPrimaryButtonCandidates() {
+    return Array.from(
+      document.querySelectorAll(
+        'span.primaryButton'
+      )
+    ).filter(
+      candidate =>
+        candidate.isConnected
+    );
+  }
+
+  function isPrimaryButtonLayoutVisible(
+    candidate
+  ) {
+    if (!candidate) {
+      return false;
+    }
+
+    const rect =
+      candidate.getBoundingClientRect();
+
+    if (
+      rect.width <= 0 ||
+      rect.height <= 0
+    ) {
+      return false;
+    }
+
+    const style =
+      window.getComputedStyle(
+        candidate
+      );
+
+    return (
+      style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      style.opacity !== '0'
+    );
+  }
+
+  function scorePrimaryButtonCandidate(
+    candidate
+  ) {
+    if (
+      !candidate ||
+      !candidate.isConnected ||
+      !isPrimaryButtonLayoutVisible(
+        candidate
+      )
+    ) {
+      return Number.NEGATIVE_INFINITY;
+    }
+
+    const rect =
+      candidate.getBoundingClientRect();
+
+    const viewportIntersection =
+      rect.right > 0 &&
+      rect.bottom > 0 &&
+      rect.left <
+        window.innerWidth &&
+      rect.top <
+        window.innerHeight;
+
+    const hasLabel =
+      Boolean(
+        candidate.querySelector(
+          'span'
+        )
+      );
+
+    const hasConverterUi =
+      Boolean(
+        candidate.querySelector(
+          '.convert-button__label'
+        )
+      );
+
+    let score =
+      100;
+
+    // Prefer the currently rendered responsive branch. Area is capped so an
+    // unexpectedly large element cannot dominate the candidate selection.
+    score +=
+      Math.min(
+        40,
+        Math.round(
+          (
+            rect.width *
+            rect.height
+          ) / 400
+        )
+      );
+
+    score +=
+      viewportIntersection
+        ? 20
+        : 0;
+
+    score +=
+      hasLabel
+        ? 10
+        : 0;
+
+    // Keep using an already initialized visible button when MakerWorld causes
+    // a harmless DOM mutation. Hidden responsive copies never reach this point.
+    score +=
+      hasConverterUi
+        ? 5
+        : 0;
+
+    return score;
+  }
+
+  function findPrimaryButtonMatch() {
+    const candidates =
+      getPrimaryButtonCandidates();
+
+    let bestButton =
+      null;
+
+    let bestScore =
+      Number.NEGATIVE_INFINITY;
+
+    let visibleCandidateCount =
+      0;
+
+    for (
+      const candidate of
+      candidates
+    ) {
+      const score =
+        scorePrimaryButtonCandidate(
+          candidate
+        );
+
+      if (!Number.isFinite(score)) {
+        continue;
+      }
+
+      visibleCandidateCount++;
+
+      if (score > bestScore) {
+        bestScore =
+          score;
+
+        bestButton =
+          candidate;
+      }
+    }
+
+    return {
+      button:
+        bestButton,
+
+      candidateCount:
+        candidates.length,
+
+      visibleCandidateCount,
+
+      bestScore:
+        Number.isFinite(bestScore)
+          ? bestScore
+          : null,
+    };
+  }
+
   function findButton() {
-    return document.querySelector('span.primaryButton');
+    return findPrimaryButtonMatch()
+      .button;
+  }
+
+  function restoreMakerWorldPrimaryButton(
+    btn
+  ) {
+    const label =
+      btn?.querySelector('span');
+
+    if (
+      !label ||
+      !label.querySelector(
+        '.convert-button__label'
+      )
+    ) {
+      return false;
+    }
+
+    const originalText =
+      label.dataset.origText ||
+      'Open in Bambu Studio';
+
+    label.classList.remove(
+      'u1-btn',
+      'is-converting',
+      'is-success',
+      'is-error'
+    );
+
+    label.replaceChildren();
+    label.textContent =
+      originalText;
+
+    return true;
+  }
+
+  function cleanupInactivePrimaryButtonUIs(
+    activeButton
+  ) {
+    for (
+      const candidate of
+      getPrimaryButtonCandidates()
+    ) {
+      if (
+        candidate ===
+        activeButton
+      ) {
+        continue;
+      }
+
+      restoreMakerWorldPrimaryButton(
+        candidate
+      );
+    }
   }
 
   // One-time creation of the button structure inside MakerWorld's label span.
@@ -805,8 +1027,19 @@ function createButtonIconSvg(state) {
     _resultState = 'ready';
     _lastErrorReportText = '';
 
-    window.postMessage({ __u1SetMode: active }, '*');
+    window.postMessage(
+      {
+        __u1SetMode:
+          active,
+      },
+      '*'
+    );
+
     updateButton();
+
+    // Record the changed U1 selection and button state in the compact
+    // MakerWorld UI integration report.
+    scheduleU1Reconcile(0);
   }
 
   function updateButton() {
@@ -814,6 +1047,12 @@ function createButtonIconSvg(state) {
       findButton();
 
     if (!btn) return;
+
+    // MakerWorld can keep hidden responsive copies of the primary action in
+    // the DOM. Only the currently visible candidate may contain the U1 UI.
+    cleanupInactivePrimaryButtonUIs(
+      btn
+    );
 
     const label =
       btn.querySelector('span');
@@ -832,13 +1071,14 @@ function createButtonIconSvg(state) {
           : _resultState
       );
     } else {
-      // Tear down our UI and restore MakerWorld's original text
-      if (label.querySelector('.convert-button__label')) {
-        const orig = label.dataset.origText || 'Open in Bambu Studio';
-        label.classList.remove('u1-btn', 'is-converting', 'is-success', 'is-error');
-        while (label.firstChild) label.removeChild(label.firstChild);
-        label.textContent = orig;
-        _btnState = null;
+      // Tear down our UI and restore MakerWorld's original text.
+      if (
+        restoreMakerWorldPrimaryButton(
+          btn
+        )
+      ) {
+        _btnState =
+          null;
       }
     }
   }
@@ -3029,102 +3269,2316 @@ function createButtonIconSvg(state) {
     });
   }
 
-  // ── Printer-filter Swiper injection ───────────────────────────────────────────
-  function findSwiper() {
-    for (const h4 of document.querySelectorAll('h4')) {
-      if (h4.textContent.includes('Print Profile')) {
-        let el = h4.parentElement;
-        while (el && el !== document.body) {
-          const w = el.querySelector('.swiper-wrapper');
-          if (w) return w;
-          el = el.parentElement;
-        }
+  // ── MakerWorld printer-filter integration ─────────────────────────────────────
+  //
+  // MakerWorld uses a Swiper for the printer-filter row even when every
+  // available printer fits into one line and no navigation arrows are shown.
+  //
+  // Detection is deliberately structural and does not depend on:
+  //
+  // - translated headings such as "Print Profile" or "Druckprofil"
+  // - a whitelist of known MakerWorld printer names
+  // - generated mw-css-* class names
+  // - visible Swiper navigation arrows
+  //
+  // The integration is reconciled idempotently. Existing U1 elements are
+  // reused and never rebuilt merely because MakerWorld caused another DOM
+  // mutation.
+
+  const U1_WINDOW_MESSAGE_SOURCE =
+    'makerworld-to-snapmaker-u1';
+
+  const U1_UI_ADAPTER_VERSION =
+    2;
+
+  const U1_RECONCILE_DELAY_MS =
+    100;
+
+  const U1_RECONCILE_RETRY_DELAY_MS =
+    250;
+
+  const U1_MAX_STARTUP_RETRIES =
+    8;
+
+  let u1ReconcileTimer =
+    null;
+
+  let u1StartupRetryCount =
+    0;
+
+  let u1SwiperRefreshSequence =
+    0;
+
+  let u1UiDebugEnabled =
+    true;
+
+  let u1MainWorldReady =
+    false;
+
+  let lastU1UiReportSignature =
+    '';
+
+  const u1SwiperRefreshResults =
+    new WeakMap();
+
+  const u1SwiperRepairResults =
+    new WeakMap();
+
+  // ── Compact UI integration report ─────────────────────────────────────────────
+
+  function createU1UiIntegrationReport() {
+    return {
+      adapterVersion:
+        U1_UI_ADAPTER_VERSION,
+
+      pagePath:
+        location.pathname,
+
+      pageLanguage:
+        document.documentElement.lang ||
+        navigator.language ||
+        'unknown',
+
+      stages:
+        [],
+
+      summary: {
+        code:
+          'U1-UI-WAITING',
+
+        result:
+          'waiting',
+
+        primaryButtonFound:
+          false,
+
+        primaryButtonCandidateCount:
+          0,
+
+        primaryButtonVisibleCandidateCount:
+          0,
+
+        primaryButtonBestScore:
+          null,
+
+        primaryButtonVisible:
+          false,
+
+        swiperWrapperCount:
+          0,
+
+        printerCandidateCount:
+          0,
+
+        printerContainerFound:
+          false,
+
+        printerContainerType:
+          null,
+
+        nativePrinterCount:
+          0,
+
+        printerLabels:
+          [],
+
+        navigationPresent:
+          false,
+
+        mainWorldReady:
+          u1MainWorldReady === true,
+
+        u1OptionBefore:
+          false,
+
+        u1OptionAction:
+          'none',
+
+        u1OptionPresent:
+          false,
+
+        u1OptionVisible:
+          false,
+
+        swiperRefreshResult:
+          'not-requested',
+
+        swiperRepairAttempted:
+          false,
+
+        swiperRepairResult:
+          'not-needed',
+
+        u1ModeActive:
+          u1ModeActive === true,
+
+        convertButtonState:
+          'missing',
+
+        retryPending:
+          false,
+      },
+    };
+  }
+
+  function addU1UiIntegrationStage(
+    report,
+    stage,
+    result,
+    details = {}
+  ) {
+    report.stages.push({
+      stage:
+        String(stage || ''),
+
+      result:
+        String(result || ''),
+
+      details: {
+        ...details,
+      },
+    });
+  }
+
+  function getU1ConvertButtonState() {
+    const button =
+      findButton();
+
+    if (!button) {
+      return 'missing';
+    }
+
+    const label =
+      button.querySelector('span');
+
+    if (!label) {
+      return 'missing-label';
+    }
+
+    const converterLabel =
+      label.querySelector(
+        '.convert-button__label'
+      );
+
+    if (!converterLabel) {
+      return 'native';
+    }
+
+    if (
+      label.classList.contains(
+        'is-converting'
+      )
+    ) {
+      return 'converting';
+    }
+
+    if (
+      label.classList.contains(
+        'is-success'
+      )
+    ) {
+      return 'success';
+    }
+
+    if (
+      label.classList.contains(
+        'is-error'
+      )
+    ) {
+      return 'error';
+    }
+
+    return 'ready';
+  }
+
+  function finalizeU1UiIntegrationReport(
+    report
+  ) {
+    const summary =
+      report.summary;
+
+    summary.u1ModeActive =
+      u1ModeActive === true;
+
+    summary.mainWorldReady =
+      u1MainWorldReady === true;
+
+    summary.convertButtonState =
+      getU1ConvertButtonState();
+
+    if (!summary.primaryButtonFound) {
+      if (summary.retryPending) {
+        summary.code =
+          'U1-UI-WAITING';
+
+        summary.result =
+          'waiting';
+      } else {
+        summary.code =
+          'U1-UI-PRIMARY-MISSING';
+
+        summary.result =
+          'warning';
       }
+    } else if (
+      !summary.printerContainerFound
+    ) {
+      if (summary.retryPending) {
+        summary.code =
+          'U1-UI-WAITING';
+
+        summary.result =
+          'waiting';
+      } else {
+        summary.code =
+          'U1-UI-PRINTER-CONTAINER-MISSING';
+
+        summary.result =
+          'warning';
+      }
+    } else if (
+      !summary.u1OptionPresent
+    ) {
+      summary.code =
+        'U1-UI-U1-OPTION-MISSING';
+
+      summary.result =
+        'warning';
+    } else if (
+      summary.swiperRefreshResult ===
+      'update-failed'
+    ) {
+      summary.code =
+        'U1-UI-SWIPER-REFRESH-FAILED';
+
+      summary.result =
+        'warning';
+    } else if (
+      summary.swiperRefreshResult ===
+      'resize-fallback-dispatched'
+    ) {
+      summary.code =
+        'U1-UI-SWIPER-REFRESH-FALLBACK';
+
+      summary.result =
+        summary.u1OptionVisible
+          ? 'ok'
+          : 'warning';
+    } else if (
+      summary.swiperRepairResult ===
+      'repair-failed'
+    ) {
+      summary.code =
+        'U1-UI-SWIPER-REPAIR-FAILED';
+
+      summary.result =
+        'warning';
+    } else if (
+      !summary.u1OptionVisible &&
+      summary.swiperRepairResult ===
+        'requested'
+    ) {
+      summary.code =
+        'U1-UI-SWIPER-REPAIR-PENDING';
+
+      summary.result =
+        'waiting';
+    } else if (
+      !summary.u1OptionVisible
+    ) {
+      summary.code =
+        'U1-UI-U1-OPTION-HIDDEN';
+
+      summary.result =
+        'warning';
+    } else {
+      summary.code =
+        'U1-UI-OK';
+
+      summary.result =
+        'ok';
     }
-    const known = new Set(['All','P1S','P1P','P2S','X1','X1 Carbon','X1E','X2D',
-                           'A1','A1 mini','A2L','H2D','H2D Pro','H2C','H2S']);
-    for (const w of document.querySelectorAll('.swiper-wrapper')) {
-      const texts = Array.from(w.querySelectorAll('.swiper-slide')).map(s => s.textContent.trim());
-      if (texts.some(t => known.has(t))) return w;
+
+    addU1UiIntegrationStage(
+      report,
+      'Finished',
+      summary.result,
+      {
+        code:
+          summary.code,
+      }
+    );
+
+    return report;
+  }
+
+  function createU1UiReportSignature(
+    report
+  ) {
+    const summary =
+      report.summary;
+
+    return JSON.stringify({
+      adapterVersion:
+        report.adapterVersion,
+
+      pagePath:
+        report.pagePath,
+
+      code:
+        summary.code,
+
+      result:
+        summary.result,
+
+      primaryButtonFound:
+        summary.primaryButtonFound,
+
+      primaryButtonCandidateCount:
+        summary.primaryButtonCandidateCount,
+
+      primaryButtonVisibleCandidateCount:
+        summary.primaryButtonVisibleCandidateCount,
+
+      primaryButtonBestScore:
+        summary.primaryButtonBestScore,
+
+      primaryButtonVisible:
+        summary.primaryButtonVisible,
+
+      swiperWrapperCount:
+        summary.swiperWrapperCount,
+
+      printerCandidateCount:
+        summary.printerCandidateCount,
+
+      printerContainerFound:
+        summary.printerContainerFound,
+
+      nativePrinterCount:
+        summary.nativePrinterCount,
+
+      navigationPresent:
+        summary.navigationPresent,
+
+      mainWorldReady:
+        summary.mainWorldReady,
+
+      u1OptionAction:
+        summary.u1OptionAction,
+
+      u1OptionPresent:
+        summary.u1OptionPresent,
+
+      u1OptionVisible:
+        summary.u1OptionVisible,
+
+      swiperRefreshResult:
+        summary.swiperRefreshResult,
+
+      swiperRepairAttempted:
+        summary.swiperRepairAttempted,
+
+      swiperRepairResult:
+        summary.swiperRepairResult,
+
+      u1ModeActive:
+        summary.u1ModeActive,
+
+      convertButtonState:
+        summary.convertButtonState,
+
+      retryPending:
+        summary.retryPending,
+    });
+  }
+
+  function formatU1UiStageDetails(
+    details
+  ) {
+    const entries =
+      Object.entries(
+        details || {}
+      );
+
+    if (!entries.length) {
+      return '';
     }
+
+    return entries
+      .map(
+        ([key, value]) => {
+          if (Array.isArray(value)) {
+            return (
+              `${key}: ` +
+              value.join(', ')
+            );
+          }
+
+          return `${key}: ${String(value)}`;
+        }
+      )
+      .join(' · ');
+  }
+
+  function logU1UiIntegrationReport(
+    report
+  ) {
+    finalizeU1UiIntegrationReport(
+      report
+    );
+
+    const signature =
+      createU1UiReportSignature(
+        report
+      );
+
+    if (
+      signature ===
+      lastU1UiReportSignature
+    ) {
+      return;
+    }
+
+    lastU1UiReportSignature =
+      signature;
+
+    const isProblem =
+      report.summary.result ===
+        'warning';
+
+    // When the normal Debug Report is disabled, keep successful and temporary
+    // waiting reports silent. Real UI integration warnings remain visible.
+    if (
+      !u1UiDebugEnabled &&
+      !isProblem
+    ) {
+      return;
+    }
+
+    const title =
+      [
+        '[U1 Extension] MakerWorld UI Integration',
+        `Adapter v${report.adapterVersion}`,
+        report.summary.code,
+      ].join(' · ');
+
+    const openGroup =
+      isProblem
+        ? console.group
+        : console.groupCollapsed;
+
+    openGroup.call(
+      console,
+      title
+    );
+
+    console.table(
+      report.stages.map(
+        item => ({
+          Stage:
+            item.stage,
+
+          Result:
+            item.result,
+
+          Details:
+            formatU1UiStageDetails(
+              item.details
+            ),
+        })
+      )
+    );
+
+    console.log(
+      'Summary',
+      {
+        adapterVersion:
+          report.adapterVersion,
+
+        pagePath:
+          report.pagePath,
+
+        pageLanguage:
+          report.pageLanguage,
+
+        ...report.summary,
+      }
+    );
+
+    console.groupEnd();
+  }
+
+  async function initializeU1UiDebugSetting() {
+    const settings =
+      await getStorageSyncSafe({
+        debugReport:
+          true,
+      });
+
+    u1UiDebugEnabled =
+      settings.debugReport !== false;
+  }
+
+  void initializeU1UiDebugSetting();
+
+  try {
+    chrome.storage.onChanged.addListener(
+      (changes, areaName) => {
+        if (
+          areaName !== 'sync' ||
+          !changes.debugReport
+        ) {
+          return;
+        }
+
+        u1UiDebugEnabled =
+          changes.debugReport.newValue !==
+          false;
+
+        // Allow the current state to be emitted once under the new setting.
+        lastU1UiReportSignature =
+          '';
+
+        scheduleU1Reconcile(0);
+      }
+    );
+  } catch (error) {
+    console.warn(
+      '[U1 Extension] Could not watch Debug Report setting changes:',
+      error
+    );
+  }
+
+  // ── Structural printer-filter detection ───────────────────────────────────────
+
+  function normalizePrinterFilterText(
+    value
+  ) {
+    return String(value || '')
+      .trim()
+      .replace(/\s+/g, ' ');
+  }
+
+  function getDirectSwiperSlides(
+    wrapper
+  ) {
+    if (!wrapper) {
+      return [];
+    }
+
+    return Array.from(
+      wrapper.children
+    ).filter(
+      child =>
+        child.classList?.contains(
+          'swiper-slide'
+        )
+    );
+  }
+
+  function getPrinterSlideLabel(
+    slide
+  ) {
+    if (!slide) {
+      return '';
+    }
+
+    return normalizePrinterFilterText(
+      slide.textContent
+    );
+  }
+
+  function containsVisualMedia(
+    element
+  ) {
+    return Boolean(
+      element?.querySelector(
+        'img, video, picture, canvas'
+      )
+    );
+  }
+
+  function getLocalPanelDistance(
+    element,
+    target,
+    maxDepth = 16
+  ) {
+    if (
+      !element ||
+      !target
+    ) {
+      return null;
+    }
+
+    let current =
+      element.parentElement;
+
+    for (
+      let depth = 1;
+      current &&
+      current !== document.body &&
+      depth <= maxDepth;
+      depth++
+    ) {
+      if (current.contains(target)) {
+        return depth;
+      }
+
+      current =
+        current.parentElement;
+    }
+
     return null;
   }
 
-  function injectU1Slide(wrapper) {
-    if (isInjecting)                             return;
-    if (wrapper.querySelector('[data-u1-slide]')) return;
+  function scorePrinterSwiperCandidate(
+    wrapper,
+    primaryButton
+  ) {
+    if (
+      !wrapper ||
+      !wrapper.isConnected
+    ) {
+      return Number.NEGATIVE_INFINITY;
+    }
 
-    const slides = wrapper.querySelectorAll('.swiper-slide');
-    if (!slides.length) return;
+    // Popups and menus can also contain compact text elements, but can never
+    // represent the printer-filter row.
+    if (
+      wrapper.closest(
+        [
+          '.MuiPopper-root',
+          '.MuiPopover-root',
+          '.MuiMenu-root',
+          '[role="tooltip"]',
+          '[role="menu"]',
+          '[role="listbox"]',
+        ].join(', ')
+      )
+    ) {
+      return Number.NEGATIVE_INFINITY;
+    }
 
-    isInjecting = true;
-    try {
-      const ref      = slides[1] || slides[0];
-      const outerDiv = ref.querySelector(':scope > div');
-      const innerDiv = outerDiv?.querySelector(':scope > div');
-      const outerCls = (outerDiv?.className || '').replace(/\bfirst\b/g, '').trim();
-      const innerCls = (innerDiv?.className || '').replace(/\bselected\b/g, '').trim();
+    const slides =
+      getDirectSwiperSlides(
+        wrapper
+      );
 
-      const slide = document.createElement('div');
-      slide.className       = 'swiper-slide';
-      slide.dataset.u1Slide = '1';
+    if (slides.length < 2) {
+      return Number.NEGATIVE_INFINITY;
+    }
 
-      const outer      = document.createElement('div');
-      outer.className  = outerCls;
-      const inner      = document.createElement('div');
-      inner.className  = innerCls;
-      inner.textContent = 'Snapmaker U1';
-      outer.appendChild(inner);
-      slide.appendChild(outer);
+    const panelDistance =
+      getLocalPanelDistance(
+        wrapper,
+        primaryButton
+      );
 
-      slides[0].insertAdjacentElement('afterend', slide);
-      injectedSlide = slide;
+    // The real printer filter and MakerWorld's primary action button live in
+    // the same local Print Files panel.
+    if (panelDistance === null) {
+      return Number.NEGATIVE_INFINITY;
+    }
 
-      slide.addEventListener('click', (e) => {
-        e.stopPropagation();
-        wrapper.querySelectorAll('.swiper-slide:not([data-u1-slide]) div')
-          .forEach(d => d.classList.remove('selected'));
-        inner.classList.add('selected');
-        setU1Mode(true);
-      });
+    let shortTextSlideCount =
+      0;
 
-      if (!wrapper.dataset.u1Delegated) {
-        wrapper.dataset.u1Delegated = '1';
-        wrapper.addEventListener('click', (e) => {
-          if (e.target.closest('[data-u1-slide]')) return;
-          if (u1ModeActive) { inner.classList.remove('selected'); setU1Mode(false); }
-        });
+    let mediaSlideCount =
+      0;
+
+    let emptySlideCount =
+      0;
+
+    let selectedStateCount =
+      0;
+
+    let visibleSlideCount =
+      0;
+
+    let activeSlideCount =
+      0;
+
+    let u1SlideCount =
+      0;
+
+    const labels =
+      [];
+
+    for (const slide of slides) {
+      const label =
+        getPrinterSlideLabel(
+          slide
+        );
+
+      if (
+        slide.hasAttribute(
+          'data-u1-slide'
+        )
+      ) {
+        u1SlideCount++;
+        continue;
       }
-    } finally {
-      isInjecting = false;
+
+      if (
+        slide.classList.contains(
+          'swiper-slide-visible'
+        )
+      ) {
+        visibleSlideCount++;
+      }
+
+      if (
+        slide.classList.contains(
+          'swiper-slide-active'
+        )
+      ) {
+        activeSlideCount++;
+      }
+      
+      labels.push(label);
+
+      if (!label) {
+        emptySlideCount++;
+      } else if (
+        label.length <= 32
+      ) {
+        shortTextSlideCount++;
+      }
+
+      if (
+        containsVisualMedia(
+          slide
+        )
+      ) {
+        mediaSlideCount++;
+      }
+
+      if (
+        slide.classList.contains(
+          'swiper-slide-active'
+        ) ||
+        slide.querySelector(
+          '.selected'
+        )
+      ) {
+        selectedStateCount++;
+      }
+    }
+
+    // Printer filters are compact text controls. A candidate dominated by
+    // thumbnails or media is a model/image carousel.
+    if (
+      mediaSlideCount >
+      Math.max(
+        1,
+        Math.floor(
+          slides.length / 3
+        )
+      )
+    ) {
+      return Number.NEGATIVE_INFINITY;
+    }
+
+    const requiredTextSlides =
+      Math.max(
+        2,
+        Math.ceil(
+          slides.length * 0.6
+        )
+      );
+
+    if (
+      shortTextSlideCount <
+      requiredTextSlides
+    ) {
+      return Number.NEGATIVE_INFINITY;
+    }
+
+    const uniqueLabels =
+      new Set(
+        labels.filter(Boolean)
+      );
+
+    let score =
+      0;
+
+    // Strongest signal: proximity to MakerWorld's primary action button.
+    score +=
+      Math.max(
+        0,
+        28 -
+        panelDistance * 2
+      );
+
+    score +=
+      shortTextSlideCount * 3;
+
+    score +=
+      Math.min(
+        uniqueLabels.size,
+        12
+      );
+
+    score +=
+      selectedStateCount > 0
+        ? 5
+        : 0;
+
+    // Prefer the swiper that is actually visible.
+    score +=
+      visibleSlideCount * 6;
+
+    // Prefer the swiper containing the active slide.
+    score +=
+      activeSlideCount * 12;
+
+    // Ignore wrappers already containing our injected slide.
+    score -=
+      u1SlideCount * 25;
+
+    score -=
+      mediaSlideCount * 8;
+
+    score -=
+      emptySlideCount * 2;
+
+    return score;
+  }
+
+  function findPrinterSwiperMatch(
+    primaryButton
+  ) {
+    const wrappers =
+      Array.from(
+        document.querySelectorAll(
+          '.swiper-wrapper'
+        )
+      );
+
+    let bestWrapper =
+      null;
+
+    let bestScore =
+      Number.NEGATIVE_INFINITY;
+
+    let candidateCount =
+      0;
+
+    for (const wrapper of wrappers) {
+      const score =
+        scorePrinterSwiperCandidate(
+          wrapper,
+          primaryButton
+        );
+
+      if (!Number.isFinite(score)) {
+        continue;
+      }
+
+      candidateCount++;
+
+      if (score > bestScore) {
+        bestScore =
+          score;
+
+        bestWrapper =
+          wrapper;
+      }
+    }
+
+    return {
+      wrapper:
+        bestWrapper,
+
+      wrapperCount:
+        wrappers.length,
+
+      candidateCount,
+
+      bestScore:
+        Number.isFinite(bestScore)
+          ? bestScore
+          : null,
+    };
+  }
+
+  function getPrinterNavigationPresent(
+    wrapper
+  ) {
+    const swiperElement =
+      wrapper?.closest('.swiper');
+
+    const navigationRoot =
+      swiperElement?.parentElement ||
+      swiperElement ||
+      wrapper?.parentElement;
+
+    return Boolean(
+      navigationRoot?.querySelector(
+        [
+          '.swiper-button-prev',
+          '.swiper-button-next',
+          '[class*="machine-swiper-button"]',
+        ].join(', ')
+      )
+    );
+  }
+
+  // ── U1 slide creation and state synchronization ───────────────────────────────
+
+  function getU1SlideInner(
+    slide
+  ) {
+    if (!slide) {
+      return null;
+    }
+
+    return (
+      slide.querySelector(
+        '[data-u1-printer-label]'
+      ) ||
+      slide.querySelector(
+        ':scope > div > div'
+      ) ||
+      slide.lastElementChild
+    );
+  }
+
+  function isU1SlideVisibleInSwiper(
+    wrapper,
+    slide
+  ) {
+    if (
+      !wrapper ||
+      !slide ||
+      !isVisible(slide)
+    ) {
+      return false;
+    }
+
+    const swiperElement =
+      wrapper.closest('.swiper');
+
+    if (!swiperElement) {
+      return isVisible(slide);
+    }
+
+    const slideRect =
+      slide.getBoundingClientRect();
+
+    const swiperRect =
+      swiperElement.getBoundingClientRect();
+
+    return (
+      slideRect.width > 0 &&
+      slideRect.height > 0 &&
+      slideRect.right >
+        swiperRect.left &&
+      slideRect.left <
+        swiperRect.right &&
+      slideRect.bottom >
+        swiperRect.top &&
+      slideRect.top <
+        swiperRect.bottom
+    );
+  }
+
+  function syncU1PrinterSelection(
+    wrapper
+  ) {
+    if (!wrapper) {
+      return;
+    }
+
+    const u1Slide =
+      wrapper.querySelector(
+        ':scope > [data-u1-slide]'
+      );
+
+    const u1Inner =
+      getU1SlideInner(
+        u1Slide
+      );
+
+    if (!u1Inner) {
+      return;
+    }
+
+    if (u1ModeActive) {
+      for (
+        const nativeSlide of
+        getDirectSwiperSlides(
+          wrapper
+        )
+      ) {
+        if (
+          nativeSlide ===
+          u1Slide
+        ) {
+          continue;
+        }
+
+        nativeSlide
+          .querySelectorAll(
+            '.selected'
+          )
+          .forEach(
+            selectedElement =>
+              selectedElement.classList.remove(
+                'selected'
+              )
+          );
+      }
+
+      u1Inner.classList.add(
+        'selected'
+      );
+    } else {
+      u1Inner.classList.remove(
+        'selected'
+      );
     }
   }
 
-  // ── MutationObservers ─────────────────────────────────────────────────────────
+  function ensurePrinterWrapperClickHandling(
+    wrapper
+  ) {
+    if (
+      !wrapper ||
+      wrapper.dataset
+        .u1PrinterDelegated === '1'
+    ) {
+      return false;
+    }
+
+    wrapper.dataset.u1PrinterDelegated =
+      '1';
+
+    wrapper.addEventListener(
+      'click',
+      event => {
+        const clickedU1Slide =
+          event.target.closest(
+            '[data-u1-slide]'
+          );
+
+        if (
+          clickedU1Slide &&
+          wrapper.contains(
+            clickedU1Slide
+          )
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+
+          if (!u1ModeActive) {
+            setU1Mode(true);
+          } else {
+            updateButton();
+          }
+
+          // Resolve the current U1 element dynamically instead of retaining
+          // references to an older slide that React may have removed.
+          syncU1PrinterSelection(
+            wrapper
+          );
+
+          return;
+        }
+
+        const clickedNativeSlide =
+          event.target.closest(
+            '.swiper-slide:not([data-u1-slide])'
+          );
+
+        if (
+          clickedNativeSlide &&
+          wrapper.contains(
+            clickedNativeSlide
+          ) &&
+          u1ModeActive
+        ) {
+          // Do not block MakerWorld's own native printer-selection handler.
+          setU1Mode(false);
+
+          syncU1PrinterSelection(
+            wrapper
+          );
+        }
+      }
+    );
+
+    return true;
+  }
+
+  function requestU1MainWorldStatus() {
+    window.postMessage(
+      {
+        source:
+          U1_WINDOW_MESSAGE_SOURCE,
+
+        action:
+          'main-world-status-request',
+      },
+      '*'
+    );
+  }
+
+  function postU1PrinterSwiperRefreshRequest(
+    wrapper,
+    wrapperId
+  ) {
+    const normalizedId =
+      String(wrapperId || '');
+
+    if (
+      !wrapper ||
+      !wrapper.isConnected ||
+      !/^u1-[a-z0-9-]{1,80}$/i.test(
+        normalizedId
+      )
+    ) {
+      return false;
+    }
+
+    window.postMessage(
+      {
+        source:
+          U1_WINDOW_MESSAGE_SOURCE,
+
+        action:
+          'refresh-printer-swiper',
+
+        wrapperId:
+          normalizedId,
+      },
+      '*'
+    );
+
+    return true;
+  }
+
+  function resendPendingU1PrinterSwiperRefreshes() {
+    const pendingWrappers =
+      document.querySelectorAll(
+        '[data-u1-refresh-id]'
+      );
+
+    for (
+      const wrapper of
+      pendingWrappers
+    ) {
+      const wrapperId =
+        String(
+          wrapper.dataset.u1RefreshId ||
+          ''
+        );
+
+      const refreshState =
+        u1SwiperRefreshResults.get(
+          wrapper
+        );
+
+      if (
+        refreshState?.result !==
+          'requested' ||
+        refreshState.wrapperId !==
+          wrapperId
+      ) {
+        continue;
+      }
+
+      postU1PrinterSwiperRefreshRequest(
+        wrapper,
+        wrapperId
+      );
+    }
+  }
+
+  function requestPrinterSwiperVisibilityRepair(
+    wrapper
+  ) {
+    if (
+      !wrapper ||
+      !wrapper.isConnected
+    ) {
+      return null;
+    }
+
+    const existingState =
+      u1SwiperRepairResults.get(
+        wrapper
+      );
+
+    // Never repeatedly reset the user's Swiper position. One repair attempt is
+    // allowed for each concrete MakerWorld printer-wrapper instance.
+    if (existingState) {
+      return existingState.wrapperId;
+    }
+
+    const wrapperId =
+      [
+        'u1',
+        'repair',
+        Date.now().toString(36),
+        (
+          ++u1SwiperRefreshSequence
+        ).toString(36),
+      ].join('-');
+
+    wrapper.dataset.u1RepairId =
+      wrapperId;
+
+    u1SwiperRepairResults.set(
+      wrapper,
+      {
+        wrapperId,
+
+        result:
+          'requested',
+
+        details:
+          {},
+      }
+    );
+
+    window.postMessage(
+      {
+        source:
+          U1_WINDOW_MESSAGE_SOURCE,
+
+        action:
+          'repair-printer-swiper-visibility',
+
+        wrapperId,
+      },
+      '*'
+    );
+
+    return wrapperId;
+  }
+
+
+  function requestPrinterSwiperRefresh(
+    wrapper
+  ) {
+    if (
+      !wrapper ||
+      !wrapper.isConnected
+    ) {
+      return null;
+    }
+
+    const wrapperId =
+      [
+        'u1',
+        Date.now().toString(36),
+        (
+          ++u1SwiperRefreshSequence
+        ).toString(36),
+      ].join('-');
+
+    wrapper.dataset.u1RefreshId =
+      wrapperId;
+
+    u1SwiperRefreshResults.set(
+      wrapper,
+      {
+        wrapperId,
+
+        result:
+          'requested',
+
+        details:
+          {},
+      }
+    );
+
+    postU1PrinterSwiperRefreshRequest(
+      wrapper,
+      wrapperId
+    );
+
+    return wrapperId;
+  }
+
+  function injectOrReuseU1PrinterSlide(
+    wrapper
+  ) {
+    if (
+      !wrapper ||
+      isInjecting
+    ) {
+      return {
+        slide:
+          null,
+
+        action:
+          'skipped',
+
+        reason:
+          isInjecting
+            ? 'injection-already-running'
+            : 'wrapper-missing',
+
+        refreshRequested:
+          false,
+      };
+    }
+
+    const existingSlide =
+      wrapper.querySelector(
+        ':scope > [data-u1-slide]'
+      );
+
+    if (existingSlide) {
+      injectedSlide =
+        existingSlide;
+
+      ensurePrinterWrapperClickHandling(
+        wrapper
+      );
+
+      syncU1PrinterSelection(
+        wrapper
+      );
+
+      return {
+        slide:
+          existingSlide,
+
+        action:
+          'reused',
+
+        reason:
+          '',
+
+        refreshRequested:
+          false,
+      };
+    }
+
+    const slides =
+      getDirectSwiperSlides(
+        wrapper
+      );
+
+    if (!slides.length) {
+      return {
+        slide:
+          null,
+
+        action:
+          'failed',
+
+        reason:
+          'native-slides-missing',
+
+        refreshRequested:
+          false,
+      };
+    }
+
+    isInjecting =
+      true;
+
+    try {
+      const referenceSlide =
+        slides[1] ||
+        slides[0];
+
+      const referenceOuter =
+        referenceSlide.querySelector(
+          ':scope > div'
+        );
+
+      const referenceInner =
+        referenceOuter?.querySelector(
+          ':scope > div'
+        );
+
+      if (
+        !referenceOuter ||
+        !referenceInner
+      ) {
+        return {
+          slide:
+            null,
+
+          action:
+            'failed',
+
+          reason:
+            'printer-slide-template-missing',
+
+          refreshRequested:
+            false,
+        };
+      }
+
+      const outerClassName =
+        String(
+          referenceOuter.className ||
+          ''
+        )
+          .replace(
+            /\bfirst\b/g,
+            ''
+          )
+          .trim();
+
+      const innerClassName =
+        String(
+          referenceInner.className ||
+          ''
+        )
+          .replace(
+            /\bselected\b/g,
+            ''
+          )
+          .trim();
+
+      const slide =
+        document.createElement(
+          'div'
+        );
+
+      slide.className =
+        'swiper-slide';
+
+      slide.dataset.u1Slide =
+        '1';
+
+      slide.dataset.u1PrinterOption =
+        '1';
+
+      const outer =
+        document.createElement(
+          'div'
+        );
+
+      outer.className =
+        outerClassName;
+
+      const inner =
+        document.createElement(
+          'div'
+        );
+
+      inner.className =
+        innerClassName;
+
+      inner.dataset.u1PrinterLabel =
+        '1';
+
+      inner.textContent =
+        'Snapmaker U1';
+
+      outer.appendChild(
+        inner
+      );
+
+      slide.appendChild(
+        outer
+      );
+
+      // Keep the original integration position directly after MakerWorld's
+      // first "All" entry.
+      slides[0].insertAdjacentElement(
+        'afterend',
+        slide
+      );
+
+      injectedSlide =
+        slide;
+
+      ensurePrinterWrapperClickHandling(
+        wrapper
+      );
+
+      syncU1PrinterSelection(
+        wrapper
+      );
+
+      const refreshId =
+        requestPrinterSwiperRefresh(
+          wrapper
+        );
+
+      return {
+        slide,
+
+        action:
+          'inserted',
+
+        reason:
+          '',
+
+        refreshRequested:
+          Boolean(refreshId),
+      };
+    } finally {
+      isInjecting =
+        false;
+    }
+  }
+
+  // ── Main-world readiness and Swiper refresh result ─────────────────────────────
+
+  window.addEventListener(
+    'message',
+    event => {
+      if (
+        event.source !== window ||
+        !event.data ||
+        event.data.source !==
+          U1_WINDOW_MESSAGE_SOURCE
+      ) {
+        return;
+      }
+
+      if (
+        event.data.action ===
+          'main-world-ready'
+      ) {
+        const readinessChanged =
+          !u1MainWorldReady;
+
+        u1MainWorldReady =
+          true;
+
+        // A refresh request may have been sent before injected.js installed
+        // its Main World listener. Resend only requests which are still
+        // explicitly pending; completed refreshes are never repeated.
+        resendPendingU1PrinterSwiperRefreshes();
+
+        if (readinessChanged) {
+          scheduleU1Reconcile(0);
+        }
+
+        return;
+      }
+
+      const isRefreshResult =
+        event.data.action ===
+          'printer-swiper-refresh-result';
+
+      const isRepairResult =
+        event.data.action ===
+          'printer-swiper-repair-result';
+
+      if (
+        !isRefreshResult &&
+        !isRepairResult
+      ) {
+        return;
+      }
+
+      const wrapperId =
+        String(
+          event.data.wrapperId ||
+          ''
+        );
+
+      if (
+        !/^u1-[a-z0-9-]{1,80}$/i.test(
+          wrapperId
+        )
+      ) {
+        return;
+      }
+
+      const markerAttribute =
+        isRepairResult
+          ? 'data-u1-repair-id'
+          : 'data-u1-refresh-id';
+
+      const wrapper =
+        Array.from(
+          document.querySelectorAll(
+            `[${markerAttribute}]`
+          )
+        ).find(
+          candidate =>
+            (
+              isRepairResult
+                ? candidate.dataset
+                    .u1RepairId
+                : candidate.dataset
+                    .u1RefreshId
+            ) === wrapperId
+        );
+
+      if (!wrapper) {
+        return;
+      }
+
+      const result =
+        String(
+          event.data.result ||
+          'unknown'
+        );
+
+      const resultState = {
+        wrapperId,
+
+        result,
+
+        details: {
+          ...(
+            event.data.details ||
+            {}
+          ),
+        },
+      };
+
+      if (isRepairResult) {
+        u1SwiperRepairResults.set(
+          wrapper,
+          resultState
+        );
+
+        if (
+          wrapper.dataset.u1RepairId ===
+          wrapperId
+        ) {
+          delete wrapper.dataset
+            .u1RepairId;
+        }
+      } else {
+        u1SwiperRefreshResults.set(
+          wrapper,
+          resultState
+        );
+
+        if (
+          wrapper.dataset.u1RefreshId ===
+          wrapperId
+        ) {
+          delete wrapper.dataset
+            .u1RefreshId;
+        }
+      }
+
+      // Recheck visibility and emit one changed-state report after the
+      // Main World has completed its Swiper update.
+      scheduleU1Reconcile(0);
+    }
+  );
+
+
+  // ── Idempotent reconciliation ─────────────────────────────────────────────────
+
+  function reconcileU1PrinterIntegration() {
+    if (
+      !location.pathname.includes(
+        '/models/'
+      )
+    ) {
+      return;
+    }
+
+    const report =
+      createU1UiIntegrationReport();
+
+    addU1UiIntegrationStage(
+      report,
+      'Initialize',
+      'ok',
+      {
+        modelPage:
+          true,
+
+        adapterVersion:
+          U1_UI_ADAPTER_VERSION,
+      }
+    );
+
+    if (
+      injectedSlide &&
+      !injectedSlide.isConnected
+    ) {
+      injectedSlide =
+        null;
+    }
+
+    const primaryButtonMatch =
+      findPrimaryButtonMatch();
+
+    const primaryButton =
+      primaryButtonMatch.button;
+
+    report.summary
+      .primaryButtonFound =
+      Boolean(primaryButton);
+
+    report.summary
+      .primaryButtonCandidateCount =
+      primaryButtonMatch
+        .candidateCount;
+
+    report.summary
+      .primaryButtonVisibleCandidateCount =
+      primaryButtonMatch
+        .visibleCandidateCount;
+
+    report.summary
+      .primaryButtonBestScore =
+      primaryButtonMatch
+        .bestScore;
+
+    report.summary
+      .primaryButtonVisible =
+      Boolean(
+        primaryButton &&
+        isPrimaryButtonLayoutVisible(
+          primaryButton
+        )
+      );
+
+    addU1UiIntegrationStage(
+      report,
+      'Find primary button',
+      primaryButton
+        ? 'ok'
+        : 'waiting',
+      {
+        found:
+          Boolean(primaryButton),
+
+        candidates:
+          primaryButtonMatch
+            .candidateCount,
+
+        visibleCandidates:
+          primaryButtonMatch
+            .visibleCandidateCount,
+
+        bestScore:
+          primaryButtonMatch
+            .bestScore ??
+          'none',
+
+        visible:
+          report.summary
+            .primaryButtonVisible,
+      }
+    );
+
+    if (!primaryButton) {
+      const retryPending =
+        u1StartupRetryCount <
+        U1_MAX_STARTUP_RETRIES;
+
+      report.summary.retryPending =
+        retryPending;
+
+      if (retryPending) {
+        u1StartupRetryCount++;
+
+        scheduleU1Reconcile(
+          U1_RECONCILE_RETRY_DELAY_MS
+        );
+      }
+
+      logU1UiIntegrationReport(
+        report
+      );
+
+      return;
+    }
+
+    const match =
+      findPrinterSwiperMatch(
+        primaryButton
+      );
+
+    report.summary
+      .swiperWrapperCount =
+      match.wrapperCount;
+
+    report.summary
+      .printerCandidateCount =
+      match.candidateCount;
+
+    report.summary
+      .printerContainerFound =
+      Boolean(match.wrapper);
+
+    report.summary
+      .printerContainerType =
+      match.wrapper
+        ? 'swiper'
+        : null;
+
+    addU1UiIntegrationStage(
+      report,
+      'Find printer container',
+      match.wrapper
+        ? 'ok'
+        : 'waiting',
+      {
+        swiperWrappers:
+          match.wrapperCount,
+
+        candidates:
+          match.candidateCount,
+
+        bestScore:
+          match.bestScore ??
+          'none',
+      }
+    );
+
+    if (!match.wrapper) {
+      const retryPending =
+        u1StartupRetryCount <
+        U1_MAX_STARTUP_RETRIES;
+
+      report.summary.retryPending =
+        retryPending;
+
+      if (retryPending) {
+        u1StartupRetryCount++;
+
+        scheduleU1Reconcile(
+          U1_RECONCILE_RETRY_DELAY_MS
+        );
+      }
+
+      logU1UiIntegrationReport(
+        report
+      );
+
+      return;
+    }
+
+    u1StartupRetryCount =
+      0;
+
+    const wrapper =
+      match.wrapper;
+
+    const beforeSlides =
+      getDirectSwiperSlides(
+        wrapper
+      );
+
+    const existingU1Slides =
+      wrapper.querySelectorAll(
+        ':scope > [data-u1-slide]'
+      );
+
+    const labels =
+      beforeSlides
+        .filter(
+          slide =>
+            !slide.hasAttribute(
+              'data-u1-slide'
+            )
+        )
+        .map(
+          getPrinterSlideLabel
+        )
+        .filter(Boolean);
+
+    report.summary
+      .nativePrinterCount =
+      labels.length;
+
+    report.summary
+      .printerLabels =
+      labels.slice(0, 20);
+
+    report.summary
+      .navigationPresent =
+      getPrinterNavigationPresent(
+        wrapper
+      );
+
+    report.summary
+      .u1OptionBefore =
+      existingU1Slides.length > 0;
+
+    addU1UiIntegrationStage(
+      report,
+      'Inspect printer container',
+      'ok',
+      {
+        nativePrinters:
+          labels.length,
+
+        navigation:
+          report.summary
+            .navigationPresent,
+
+        existingU1Options:
+          existingU1Slides.length,
+      }
+    );
+
+    if (existingU1Slides.length > 1) {
+      console.warn(
+        '[U1 Extension] Multiple Snapmaker U1 printer entries detected in the active printer wrapper.'
+      );
+    }
+
+    const integration =
+      injectOrReuseU1PrinterSlide(
+        wrapper
+      );
+
+    report.summary
+      .u1OptionAction =
+      integration.action;
+
+    report.summary
+      .u1OptionPresent =
+      Boolean(
+        integration.slide
+      );
+
+    addU1UiIntegrationStage(
+      report,
+      'Insert or reuse U1 option',
+      integration.slide
+        ? 'ok'
+        : 'failed',
+      {
+        action:
+          integration.action,
+
+        reason:
+          integration.reason ||
+          'none',
+
+        refreshRequested:
+          integration.refreshRequested,
+      }
+    );
+
+    if (!integration.slide) {
+      logU1UiIntegrationReport(
+        report
+      );
+
+      return;
+    }
+
+    injectedSlide =
+      integration.slide;
+
+    const handlerAdded =
+      ensurePrinterWrapperClickHandling(
+        wrapper
+      );
+
+    syncU1PrinterSelection(
+      wrapper
+    );
+
+    addU1UiIntegrationStage(
+      report,
+      'Synchronize U1 selection',
+      'ok',
+      {
+        modeActive:
+          u1ModeActive,
+
+        handlerAdded,
+      }
+    );
+
+    const refreshState =
+      u1SwiperRefreshResults.get(
+        wrapper
+      );
+
+    report.summary
+      .swiperRefreshResult =
+      refreshState?.result ||
+      (
+        integration.refreshRequested
+          ? 'requested'
+          : 'not-requested'
+      );
+
+    addU1UiIntegrationStage(
+      report,
+      'Refresh printer layout',
+      (
+        report.summary
+          .swiperRefreshResult ===
+          'update-failed'
+      )
+        ? 'warning'
+        : (
+            report.summary
+              .swiperRefreshResult ===
+              'requested'
+              ? 'pending'
+              : 'ok'
+          ),
+      {
+        result:
+          report.summary
+            .swiperRefreshResult,
+
+        mainWorldReady:
+          u1MainWorldReady,
+
+        swiperFound:
+          refreshState?.details
+            ?.swiperFound ??
+          'unknown',
+
+        navigationUpdated:
+          refreshState?.details
+            ?.navigationUpdated ??
+          'unknown',
+      }
+    );
+
+    report.summary
+      .u1OptionVisible =
+      isU1SlideVisibleInSwiper(
+        wrapper,
+        integration.slide
+      );
+
+    addU1UiIntegrationStage(
+      report,
+      'Check U1 visibility',
+      report.summary
+        .u1OptionVisible
+        ? 'ok'
+        : 'warning',
+      {
+        visible:
+          report.summary
+            .u1OptionVisible,
+      }
+    );
+
+    let repairState =
+      u1SwiperRepairResults.get(
+        wrapper
+      );
+
+    // Trigger the stronger positioning repair only after the normal Swiper
+    // refresh has completed successfully and the U1 option is still outside
+    // the visible viewport.
+    if (
+      !report.summary.u1OptionVisible &&
+      report.summary
+        .swiperRefreshResult !==
+        'requested' &&
+      !repairState
+    ) {
+      const repairId =
+        requestPrinterSwiperVisibilityRepair(
+          wrapper
+        );
+
+      if (repairId) {
+        repairState =
+          u1SwiperRepairResults.get(
+            wrapper
+          );
+      }
+    }
+
+    report.summary
+      .swiperRepairAttempted =
+      Boolean(repairState);
+
+    report.summary
+      .swiperRepairResult =
+      repairState?.result ||
+      'not-needed';
+
+    addU1UiIntegrationStage(
+      report,
+      'Repair printer visibility',
+      !repairState
+        ? 'skipped'
+        : repairState.result ===
+            'requested'
+          ? 'pending'
+          : repairState.result ===
+              'repair-failed'
+            ? 'warning'
+            : 'ok',
+      {
+        attempted:
+          Boolean(repairState),
+
+        result:
+          repairState?.result ||
+          'not-needed',
+
+        swiperFound:
+          repairState?.details
+            ?.swiperFound ??
+          'unknown',
+
+        slideToAvailable:
+          repairState?.details
+            ?.slideToAvailable ??
+          'unknown',
+
+        navigationUpdated:
+          repairState?.details
+            ?.navigationUpdated ??
+          'unknown',
+      }
+    );
+
+    if (u1ModeActive) {
+      // updateButton() is internally idempotent and only repairs the button
+      // if MakerWorld replaced or changed its DOM representation.
+      updateButton();
+    }
+
+    report.summary
+      .convertButtonState =
+      getU1ConvertButtonState();
+
+    addU1UiIntegrationStage(
+      report,
+      'Synchronize convert button',
+      'ok',
+      {
+        state:
+          report.summary
+            .convertButtonState,
+
+        u1ModeActive:
+          u1ModeActive,
+      }
+    );
+
+    logU1UiIntegrationReport(
+      report
+    );
+  }
+
+  function scheduleU1Reconcile(
+    delay =
+      U1_RECONCILE_DELAY_MS
+  ) {
+    if (
+      u1ReconcileTimer !== null
+    ) {
+      return;
+    }
+
+    u1ReconcileTimer =
+      window.setTimeout(
+        () => {
+          u1ReconcileTimer =
+            null;
+
+          reconcileU1PrinterIntegration();
+        },
+        Math.max(
+          0,
+          Number(delay) || 0
+        )
+      );
+  }
+
+  // ── DOM, SPA and responsive lifecycle ─────────────────────────────────────────
+
+  let lastPath =
+    location.pathname;
+
+  const observerRoot =
+    document.body ||
+    document.documentElement;
+
   new MutationObserver(() => {
-    if (isInjecting) return;
-    if (!location.pathname.includes('/models/')) return;
+    if (isInjecting) {
+      return;
+    }
 
-    const wrapper = findSwiper();
-    if (wrapper) injectU1Slide(wrapper);
-    if (u1ModeActive) updateButton();
-  }).observe(document.body, { childList: true, subtree: true });
+    if (
+      location.pathname !==
+      lastPath
+    ) {
+      lastPath =
+        location.pathname;
 
-  let lastPath = location.pathname;
-  new MutationObserver(() => {
-    if (isInjecting || location.pathname === lastPath) return;
+      injectedSlide =
+        null;
 
-    lastPath = location.pathname;
-    injectedSlide = null;
+      u1StartupRetryCount =
+        0;
 
-    _makerWorld3mfSelectedForPage =
-      false;
+      lastU1UiReportSignature =
+        '';
 
-    setU1Mode(false);
+      _makerWorld3mfSelectedForPage =
+        false;
 
-    if (!location.pathname.includes('/models/')) return;
+      // Do not reset an active conversion because of a transient React
+      // rerender or route transition while the conversion is still running.
+      if (!isConverting) {
+        setU1Mode(false);
+      }
+    }
 
-    const wrapper = findSwiper();
-    if (wrapper) injectU1Slide(wrapper);
-  }).observe(document.body, { childList: true, subtree: true });
+    scheduleU1Reconcile();
+  }).observe(
+    observerRoot,
+    {
+      childList:
+        true,
+
+      subtree:
+        true,
+    }
+  );
+
+  window.addEventListener(
+    'resize',
+    () => {
+      scheduleU1Reconcile();
+    },
+    {
+      passive:
+        true,
+    }
+  );
+
+  window.addEventListener(
+    'pageshow',
+    () => {
+      scheduleU1Reconcile(0);
+    }
+  );
+
+  document.addEventListener(
+    'visibilitychange',
+    () => {
+      if (
+        document.visibilityState ===
+        'visible'
+      ) {
+        scheduleU1Reconcile();
+      }
+    }
+  );
+
+  // Establish a two-way readiness handshake with injected.js.
+  //
+  // injected.js also sends an unsolicited ready notification after installing
+  // its listener. Together, both directions make the startup order irrelevant.
+  requestU1MainWorldStatus();
+
+  // Initial reconciliation. MakerWorld may render the primary button and the
+  // printer filter in separate React passes, so a limited startup retry is
+  // used when either structure is not available yet.
+  scheduleU1Reconcile(0);
 })();

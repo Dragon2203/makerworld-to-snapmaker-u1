@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
+## [1.5.2] - 2026-08-06
+
+### Fixed
+- Improved MakerWorld printer filter detection across different layouts, viewport sizes and responsive DOM variants.
+- Fixed the Snapmaker U1 option not appearing when MakerWorld kept multiple printer carousels in the DOM.
+- Fixed the visible MakerWorld primary action button not switching to the converter interface when hidden responsive button copies were present.
+- Added a safe Swiper visibility repair fallback for cases where the U1 option is inserted but remains outside the visible printer list.
+
+### Changed
+- Expanded the MakerWorld UI integration report with printer carousel, primary button and visibility diagnostics.
+
 ## [1.5.1] - 2026-08-01
 
 ### Added
