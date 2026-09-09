@@ -1,10 +1,11 @@
-// Runs in MAIN world — wraps window.fetch to intercept MakerWorld's own
+// Runs in MAIN world — wraps fetch and XMLHttpRequest to intercept MakerWorld's own
 // authenticated f3mf download requests so we inherit auth for free.
 
 console.log('[U1 injected] loaded');
 
 window.__u1ModeActive = false;
 window.__u1Capturing  = false;
+let u1CaptureGeneration = 0;
 
 const _baseFetch = window.fetch;
 window.fetch = function (url, opts) {
@@ -44,6 +45,72 @@ window.fetch = function (url, opts) {
     });
   }
   return p;
+};
+
+// MakerWorld also downloads profiles through XMLHttpRequest. Observe its own
+// response without changing the request, responseType, or page event handlers.
+const u1XhrRequestUrls = new WeakMap();
+const u1OriginalXhrOpen = XMLHttpRequest.prototype.open;
+const u1OriginalXhrSend = XMLHttpRequest.prototype.send;
+
+XMLHttpRequest.prototype.open = function (method, url) {
+  const result = u1OriginalXhrOpen.apply(this, arguments);
+  u1XhrRequestUrls.set(this, String(url));
+  return result;
+};
+
+XMLHttpRequest.prototype.send = function () {
+  const requestUrl = u1XhrRequestUrls.get(this) || '';
+  if (!window.__u1Capturing || !requestUrl.includes('f3mf')) {
+    return u1OriginalXhrSend.apply(this, arguments);
+  }
+
+  const generation = u1CaptureGeneration;
+  const onLoadEnd = async () => {
+    if (!window.__u1Capturing || generation !== u1CaptureGeneration) return;
+    window.__u1Capturing = false;
+    console.log('[U1 injected] intercepted f3mf XMLHttpRequest');
+
+    if (this.status < 200 || this.status >= 300) {
+      window.dispatchEvent(new CustomEvent('__u1_3mf_err', { detail: this.status }));
+      return;
+    }
+
+    try {
+      let buffer;
+      if (this.responseType === 'blob') {
+        buffer = await this.response.arrayBuffer();
+      } else if (this.responseType === 'arraybuffer') {
+        buffer = this.response;
+      } else if (this.responseType === 'json') {
+        buffer = JSON.stringify(this.response);
+      } else {
+        buffer = this.responseText;
+      }
+
+      // Reading a Blob is asynchronous. Do not deliver it to a later conversion
+      // if the original capture timed out or was cancelled while it was read.
+      if (generation !== u1CaptureGeneration) return;
+
+      const blobUrl = URL.createObjectURL(
+        new Blob([buffer], { type: 'application/octet-stream' })
+      );
+      window.dispatchEvent(new CustomEvent('__u1_3mf', {
+        detail: JSON.stringify({ blobUrl, requestUrl }),
+      }));
+    } catch (err) {
+      if (generation !== u1CaptureGeneration) return;
+      window.dispatchEvent(new CustomEvent('__u1_3mf_err', { detail: err.message }));
+    }
+  };
+
+  this.addEventListener('loadend', onLoadEnd, { once: true });
+  try {
+    return u1OriginalXhrSend.apply(this, arguments);
+  } catch (err) {
+    this.removeEventListener('loadend', onLoadEnd);
+    throw err;
+  }
 };
 
 const U1_WINDOW_MESSAGE_SOURCE =
@@ -556,6 +623,7 @@ window.addEventListener('message', (e) => {
   }
 
   if (e.data.__u1StartCapture) {
+    u1CaptureGeneration++;
     console.log(
       '[U1 injected] capture armed'
     );
@@ -565,6 +633,7 @@ window.addEventListener('message', (e) => {
   }
 
   if (e.data.__u1CancelCapture) {
+    u1CaptureGeneration++;
     window.__u1Capturing =
       false;
   }

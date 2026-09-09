@@ -32,6 +32,17 @@ Before submitting:
 * Update documentation if necessary.
 * Avoid unrelated refactoring.
 
+## Running regression tests
+
+With Node.js 22 or newer installed, run:
+
+```sh
+node --test tests/download-capture.test.cjs
+```
+
+These tests use Node's built-in test runner and require no installed packages.
+Node.js is only needed for tests, not to build or run the browser extension.
+
 ## Project Goals
 
 The primary goals of this project are:
