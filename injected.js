@@ -6,20 +6,70 @@ console.log('[U1 injected] loaded');
 window.__u1ModeActive = false;
 window.__u1Capturing  = false;
 
+// Incremented whenever a capture is started or cancelled.
+// Async responses from an older capture must never satisfy a newer one.
+let u1CaptureGeneration = 0;
+
 const _baseFetch = window.fetch;
 window.fetch = function (url, opts) {
   const p = _baseFetch.apply(this, arguments);
   if (typeof url === 'string' && url.includes('f3mf') && window.__u1Capturing) {
+    const captureGeneration =
+      u1CaptureGeneration;
+
     window.__u1Capturing = false;
+
     console.log('[U1 injected] intercepted f3mf fetch:', url);
+
     p.then(async (resp) => {
+      if (
+        captureGeneration !==
+        u1CaptureGeneration
+      ) {
+        return;
+      }
       console.log('[U1 injected] f3mf status:', resp.status);
       if (!resp.ok) {
-        window.dispatchEvent(new CustomEvent('__u1_3mf_err', { detail: resp.status }));
+        window.dispatchEvent(
+          new CustomEvent(
+            '__u1_3mf_err',
+            {
+              detail:
+                JSON.stringify({
+                  captureTransport:
+                    'fetch',
+
+                  errorType:
+                    'http',
+
+                  httpStatus:
+                    resp.status,
+
+                  responseType:
+                    String(
+                      resp.type ||
+                      'fetch-response'
+                    ),
+
+                  requestUrl:
+                    String(url || ''),
+                }),
+            }
+          )
+        );
+
         return;
       }
       // Clone before MakerWorld reads the original body
       const buffer  = await resp.clone().arrayBuffer();
+
+      if (
+        captureGeneration !==
+        u1CaptureGeneration
+      ) {
+        return;
+      }
+
       const blobUrl = URL.createObjectURL(
         new Blob([buffer], { type: 'application/octet-stream' })
       );
@@ -32,19 +82,361 @@ window.fetch = function (url, opts) {
             detail:
               JSON.stringify({
                 blobUrl,
+
                 requestUrl:
                   String(url || ''),
+
+                captureTransport:
+                  'fetch',
+
+                httpStatus:
+                  resp.status,
+
+                responseType:
+                  String(
+                    resp.type ||
+                    'fetch-response'
+                  ),
               }),
           }
         )
       );
     }).catch((err) => {
-      console.error('[U1 injected] capture error:', err);
-      window.dispatchEvent(new CustomEvent('__u1_3mf_err', { detail: err.message }));
+      if (
+        captureGeneration !==
+        u1CaptureGeneration
+      ) {
+        return;
+      }
+
+      console.error(
+        '[U1 injected] capture error:',
+        err
+      );
+
+      window.dispatchEvent(
+        new CustomEvent(
+          '__u1_3mf_err',
+          {
+            detail:
+              JSON.stringify({
+                captureTransport:
+                  'fetch',
+
+                errorType:
+                  'capture',
+
+                requestUrl:
+                  String(url || ''),
+
+                message:
+                  err instanceof Error
+                    ? err.message
+                    : String(err),
+              }),
+          }
+        )
+      );
     });
   }
   return p;
 };
+
+// MakerWorld may use XMLHttpRequest instead of fetch for the authenticated
+// /f3mf request. Capture that response as well and pass it through the same
+// __u1_3mf event used by the existing fetch interceptor.
+//
+// Important:
+// The /f3mf response is MakerWorld's small JSON response containing the
+// filename and signed CDN URL. content.js already parses this response and
+// downloads the actual 3MF from the CDN afterwards.
+const u1XhrRequestUrls =
+  new WeakMap();
+
+const u1OriginalXhrOpen =
+  XMLHttpRequest.prototype.open;
+
+const u1OriginalXhrSend =
+  XMLHttpRequest.prototype.send;
+
+XMLHttpRequest.prototype.open =
+  function (
+    method,
+    url
+  ) {
+    const result =
+      u1OriginalXhrOpen.apply(
+        this,
+        arguments
+      );
+
+    u1XhrRequestUrls.set(
+      this,
+      String(url || '')
+    );
+
+    return result;
+  };
+
+XMLHttpRequest.prototype.send =
+  function () {
+    const requestUrl =
+      u1XhrRequestUrls.get(this) || '';
+
+    // Leave every unrelated XHR completely untouched.
+    if (
+      !window.__u1Capturing ||
+      !requestUrl.includes('f3mf')
+    ) {
+      return u1OriginalXhrSend.apply(
+        this,
+        arguments
+      );
+    }
+
+    const captureGeneration =
+      u1CaptureGeneration;
+
+    const onLoadEnd =
+      async () => {
+        // The conversion may have timed out/cancelled while this request
+        // was running, or a newer capture may already have started.
+        if (
+          !window.__u1Capturing ||
+          captureGeneration !==
+            u1CaptureGeneration
+        ) {
+          return;
+        }
+
+        // Claim this response so another matching request cannot satisfy
+        // the same conversion.
+        window.__u1Capturing =
+          false;
+
+        if (
+          this.status < 200 ||
+          this.status >= 300
+        ) {
+          
+          window.dispatchEvent(
+            new CustomEvent(
+              '__u1_3mf_err',
+              {
+                detail:
+                  JSON.stringify({
+                    captureTransport:
+                      'XMLHttpRequest',
+
+                    errorType:
+                      'http',
+
+                    httpStatus:
+                      this.status,
+
+                    responseType:
+                      String(
+                        this.responseType ||
+                          'text'
+                      ),
+
+                    requestUrl:
+                      String(
+                        requestUrl ||
+                          ''
+                      ),
+                  }),
+              }
+            )
+          );
+
+          return;
+        }
+
+        try {
+          let buffer;
+
+          if (
+            this.responseType ===
+            'blob'
+          ) {
+            buffer =
+              await this.response.arrayBuffer();
+          } else if (
+            this.responseType ===
+            'arraybuffer'
+          ) {
+            buffer =
+              this.response;
+          } else if (
+            this.responseType ===
+            'json'
+          ) {
+            buffer =
+              JSON.stringify(
+                this.response
+              );
+          } else {
+            buffer =
+              this.responseText;
+          }
+
+          // Blob conversion above is asynchronous. A cancellation or a
+          // newer capture may have happened while we were awaiting it.
+          if (
+            captureGeneration !==
+              u1CaptureGeneration
+          ) {
+            return;
+          }
+
+          const blobUrl =
+            URL.createObjectURL(
+              new Blob(
+                [buffer],
+                {
+                  type:
+                    'application/octet-stream',
+                }
+              )
+            );
+
+          console.groupCollapsed(
+            '[U1 Download Capture] XMLHttpRequest · ' +
+            `${this.status} · captured`
+          );
+
+          console.log(
+            'Request URL:',
+            requestUrl
+          );
+
+          console.log(
+            'Transport:',
+            'XMLHttpRequest'
+          );
+
+          console.log(
+            'HTTP status:',
+            this.status
+          );
+
+          console.log(
+            'Response type:',
+            this.responseType ||
+              'text'
+          );
+
+          console.log(
+            'Result:',
+            'dispatched __u1_3mf'
+          );
+
+          console.groupEnd();
+
+          window.dispatchEvent(
+            new CustomEvent(
+              '__u1_3mf',
+              {
+                detail:
+                  JSON.stringify({
+                    blobUrl,
+
+                    requestUrl:
+                      String(
+                        requestUrl ||
+                          ''
+                      ),
+
+                    captureTransport:
+                      'XMLHttpRequest',
+
+                    httpStatus:
+                      this.status,
+
+                    responseType:
+                      String(
+                        this.responseType ||
+                          'text'
+                      ),
+                  }),
+              }
+            )
+          );
+        } catch (err) {
+          if (
+            captureGeneration !==
+              u1CaptureGeneration
+          ) {
+            return;
+          }
+
+          console.error(
+            '[U1 injected] XHR capture error:',
+            err
+          );
+
+          window.dispatchEvent(
+            new CustomEvent(
+              '__u1_3mf_err',
+              {
+                detail:
+                  JSON.stringify({
+                    captureTransport:
+                      'XMLHttpRequest',
+
+                    errorType:
+                      'capture',
+
+                    httpStatus:
+                      this.status,
+
+                    responseType:
+                      String(
+                        this.responseType ||
+                          'text'
+                      ),
+
+                    requestUrl:
+                      String(
+                        requestUrl ||
+                          ''
+                      ),
+
+                    message:
+                      err instanceof Error
+                        ? err.message
+                        : String(err),
+                  }),
+              }
+            )
+          );
+        }
+      };
+
+    this.addEventListener(
+      'loadend',
+      onLoadEnd,
+      {
+        once:
+          true,
+      }
+    );
+
+    try {
+      return u1OriginalXhrSend.apply(
+        this,
+        arguments
+      );
+    } catch (err) {
+      this.removeEventListener(
+        'loadend',
+        onLoadEnd
+      );
+
+      throw err;
+    }
+  };
 
 const U1_WINDOW_MESSAGE_SOURCE =
   'makerworld-to-snapmaker-u1';
@@ -560,11 +952,17 @@ window.addEventListener('message', (e) => {
       '[U1 injected] capture armed'
     );
 
+    u1CaptureGeneration +=
+      1;
+
     window.__u1Capturing =
       true;
   }
 
   if (e.data.__u1CancelCapture) {
+    u1CaptureGeneration +=
+      1;
+
     window.__u1Capturing =
       false;
   }

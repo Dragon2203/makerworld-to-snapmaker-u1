@@ -235,6 +235,31 @@ function createButtonIconSvg(state) {
     );
   }
 
+  function getMakerWorldRequestPath(
+    requestUrl
+  ) {
+    const value =
+      String(requestUrl || '');
+
+    if (!value) {
+      return null;
+    }
+
+    try {
+      return new URL(
+        value,
+        location.origin
+      ).pathname;
+    } catch {
+      return (
+        value
+          .split('?')[0]
+          .split('#')[0] ||
+        null
+      );
+    }
+  }
+
   function isU1InvalidFilenameError(
     errorMessage
   ) {
@@ -1175,6 +1200,9 @@ function createButtonIconSvg(state) {
 
     const diagnostics =
       createU1ConversionDiagnostics({
+        converterVersion:
+          getConverterVersion(),
+
         browser:
           isFirefox
             ? 'Firefox'
@@ -1216,11 +1244,47 @@ function createButtonIconSvg(state) {
         )
       );
 
-      throwU1SimulatedFault(
-        activeTestFault,
-        'download-timeout',
-        'Simulated MakerWorld download timeout.'
-      );
+      if (
+        activeTestFault ===
+        'download-timeout'
+      ) {
+        throw new U1ConversionError({
+          code:
+            U1_ERROR_CODES.DOWNLOAD_TIMEOUT,
+
+          stage:
+            U1_DIAGNOSTIC_STAGES.CAPTURE_DOWNLOAD,
+
+          message:
+            'Simulated MakerWorld download capture timeout.',
+
+          userMessage:
+            'No MakerWorld download response was captured within 30 seconds.',
+
+          userAction:
+            'Reload the MakerWorld page, make sure you are signed in, and try again.',
+
+          buttonText:
+            'Download timed out',
+
+          context: {
+            operation:
+              'capture-makerworld-download',
+
+            captureTransport:
+              'unknown',
+
+            timeoutMs:
+              30000,
+
+            simulatedFault:
+              'download-timeout',
+          },
+
+          simulated:
+            true,
+        });
+      }
 
       const capturedDownload =
         await triggerMakerWorldDownload();
@@ -1235,8 +1299,43 @@ function createButtonIconSvg(state) {
           ? capturedDownload?.requestUrl
           : '';
 
+      const makerWorldCaptureTransport =
+        typeof capturedDownload === 'object'
+          ? capturedDownload?.captureTransport
+          : '';
+
+      const makerWorldCaptureHttpStatus =
+        typeof capturedDownload === 'object'
+          ? capturedDownload?.httpStatus
+          : null;
+
+      const normalizedMakerWorldCaptureHttpStatus =
+        makerWorldCaptureHttpStatus === null ||
+        makerWorldCaptureHttpStatus === undefined ||
+        makerWorldCaptureHttpStatus === ''
+          ? null
+          : Number.isFinite(
+              Number(
+                makerWorldCaptureHttpStatus
+              )
+            )
+            ? Number(
+                makerWorldCaptureHttpStatus
+              )
+            : null;
+            
+      const makerWorldCaptureResponseType =
+        typeof capturedDownload === 'object'
+          ? capturedDownload?.responseType
+          : '';
+
       const makerWorldInstanceId =
         getMakerWorldInstanceId(
+          makerWorldRequestUrl
+        );
+
+      const makerWorldRequestPath =
+        getMakerWorldRequestPath(
           makerWorldRequestUrl
         );
 
@@ -1247,6 +1346,19 @@ function createButtonIconSvg(state) {
       }
 
       diagnostics.setMetadata({
+        makerWorldCaptureTransport:
+          makerWorldCaptureTransport ||
+          'unknown',
+
+        makerWorldCaptureHttpStatus:
+          normalizedMakerWorldCaptureHttpStatus,
+
+        makerWorldCaptureResponseType:
+          makerWorldCaptureResponseType ||
+          null,
+
+        makerWorldRequestPath,
+
         capturedResponseType:
           String(blobUrl).startsWith('blob:')
             ? 'blob-url'
@@ -2290,8 +2402,47 @@ function createButtonIconSvg(state) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         cleanup();
-        window.postMessage({ __u1CancelCapture: true }, '*');
-        reject(new Error('Download timed out — try again'));
+
+        window.postMessage(
+          {
+            __u1CancelCapture:
+              true,
+          },
+          '*'
+        );
+
+        reject(
+          new U1ConversionError({
+            code:
+              U1_ERROR_CODES.DOWNLOAD_TIMEOUT,
+
+            stage:
+              U1_DIAGNOSTIC_STAGES.CAPTURE_DOWNLOAD,
+
+            message:
+              'MakerWorld download capture timed out after 30 seconds.',
+
+            userMessage:
+              'No MakerWorld download response was captured within 30 seconds.',
+
+            userAction:
+              'Reload the MakerWorld page, make sure you are signed in, and try again.',
+
+            buttonText:
+              'Download timed out',
+
+            context: {
+              operation:
+                'capture-makerworld-download',
+
+              captureTransport:
+                'unknown',
+
+              timeoutMs:
+                30000,
+            },
+          })
+        );
       }, 30000);
 
       function onFile(e) {
@@ -2318,6 +2469,18 @@ function createButtonIconSvg(state) {
 
                 requestUrl:
                   parsed.requestUrl || '',
+
+                captureTransport:
+                  parsed.captureTransport ||
+                  'unknown',
+
+                httpStatus:
+                  parsed.httpStatus ??
+                  null,
+
+                responseType:
+                  parsed.responseType ||
+                  null,
               });
 
               return;
@@ -2340,10 +2503,135 @@ function createButtonIconSvg(state) {
         clearTimeout(timer);
         cleanup();
 
+        let detail =
+          e.detail;
+
+        if (
+          typeof detail === 'string'
+        ) {
+          try {
+            const parsed =
+              JSON.parse(detail);
+
+            if (
+              parsed &&
+              typeof parsed === 'object'
+            ) {
+              detail =
+                parsed;
+            }
+          } catch {
+            // Older injected.js versions supplied a plain error value.
+          }
+        }
+
+        const structuredDetail =
+          detail &&
+          typeof detail === 'object'
+            ? detail
+            : {};
+
+        const captureTransport =
+          structuredDetail
+            .captureTransport ||
+          'unknown';
+
+        const legacyHttpStatus =
+          typeof detail === 'number' &&
+          Number.isFinite(detail)
+            ? detail
+            : null;
+
+        const structuredHttpStatus =
+          structuredDetail
+            .httpStatus;
+
+        const httpStatus =
+          structuredHttpStatus === null ||
+          structuredHttpStatus === undefined ||
+          structuredHttpStatus === ''
+            ? legacyHttpStatus
+            : Number.isFinite(
+                Number(
+                  structuredHttpStatus
+                )
+              )
+              ? Number(
+                  structuredHttpStatus
+                )
+              : legacyHttpStatus;
+
+        const responseType =
+          structuredDetail
+            .responseType ||
+          null;
+
+        const requestPath =
+          getMakerWorldRequestPath(
+            structuredDetail
+              .requestUrl
+          );
+
+        const isHttpError =
+          structuredDetail
+            .errorType === 'http' ||
+          legacyHttpStatus !== null;
+
         reject(
-          new Error(
-            `Download error: ${e.detail}`
-          )
+          new U1ConversionError({
+            code:
+              isHttpError
+                ? U1_ERROR_CODES
+                    .DOWNLOAD_HTTP_FAILED
+                : U1_ERROR_CODES
+                    .DOWNLOAD_INTERCEPT_FAILED,
+
+            stage:
+              U1_DIAGNOSTIC_STAGES
+                .CAPTURE_DOWNLOAD,
+
+            message:
+              isHttpError
+                ? `MakerWorld download request failed with HTTP ${httpStatus}.`
+                : (
+                    structuredDetail
+                      .message ||
+                    `MakerWorld download capture failed: ${
+                      String(
+                        detail ||
+                        'unknown error'
+                      )
+                    }`
+                  ),
+
+            userMessage:
+              isHttpError
+                ? 'MakerWorld returned an error while preparing the source 3MF download.'
+                : 'The MakerWorld download response could not be captured.',
+
+            userAction:
+              isHttpError
+                ? 'Try the conversion again. If the problem persists, reload MakerWorld and make sure you are signed in.'
+                : 'Reload the MakerWorld page and try the conversion again.',
+
+            buttonText:
+              isHttpError
+                ? 'Download failed'
+                : 'Capture failed',
+
+            context: {
+              operation:
+                'capture-makerworld-download',
+
+              captureTransport,
+
+              httpStatus,
+
+              responseType,
+
+              requestPath,
+            },
+          })
         );
       }
       
@@ -2392,113 +2680,185 @@ function createButtonIconSvg(state) {
   }
 
   function findVisibleMakerWorldDropdown() {
-    // First try the known MakerWorld / Material UI popup containers.
-    const knownPopup =
+    const popupSelector =
+      [
+        '.MuiPopper-root',
+        '.MuiPopover-root',
+        '.MuiMenu-root',
+        '[role="tooltip"]',
+        '[role="menu"]',
+        '[role="listbox"]',
+      ].join(', ');
+
+    const knownPopups =
       Array.from(
         document.querySelectorAll(
-          [
-            '.MuiPopper-root',
-            '.MuiPopover-root',
-            '.MuiMenu-root',
-            '[role="tooltip"]',
-            '[role="menu"]',
-            '[role="listbox"]',
-          ].join(', ')
+          popupSelector
         )
-      ).find(popover => {
-        if (!isVisible(popover)) return false;
+      )
+        .filter(isVisible);
 
-        if (
-          popover.hasAttribute(
+    // Always keep recognizing our own temporary error popup, even after its
+    // native MakerWorld contents have been replaced.
+    const errorPopup =
+      knownPopups.find(
+        popup =>
+          popup.hasAttribute(
             'data-u1-error-dropdown'
           )
+      );
+
+    if (errorPopup) {
+      return errorPopup;
+    }
+
+    const btn =
+      findButton();
+
+    const buttonRoot =
+      btn?.parentElement;
+
+    if (!buttonRoot) {
+      return null;
+    }
+
+    const buttonRect =
+      buttonRoot.getBoundingClientRect();
+
+    const matchesDownloadButtonGeometry =
+      popup => {
+        if (
+          !popup ||
+          !isVisible(popup)
         ) {
-          return true;
+          return false;
         }
 
-        const text =
-          String(
-            popover.textContent || ''
-          );
+        const rect =
+          popup.getBoundingClientRect();
 
-        return /\b3mf\b/i.test(text);
-      });
+        if (
+          rect.width <= 0 ||
+          rect.height <= 0
+        ) {
+          return false;
+        }
+
+        // MakerWorld anchors the download popup directly below the complete
+        // primary-action control. The popup is aligned with both horizontal
+        // edges of that control.
+        //
+        // Use a small tolerance for browser zoom, sub-pixel layout and
+        // responsive rendering instead of depending on translated menu text
+        // or generated mw-css-* class names.
+        const horizontalTolerance =
+          12;
+
+        const verticalTolerance =
+          16;
+
+        const leftAligned =
+          Math.abs(
+            rect.left -
+            buttonRect.left
+          ) <=
+          horizontalTolerance;
+
+        const rightAligned =
+          Math.abs(
+            rect.right -
+            buttonRect.right
+          ) <=
+          horizontalTolerance;
+
+        const directlyBelow =
+          Math.abs(
+            rect.top -
+            buttonRect.bottom
+          ) <=
+          verticalTolerance;
+
+        const similarWidth =
+          rect.width >=
+            buttonRect.width * 0.8 &&
+          rect.width <=
+            buttonRect.width * 1.2;
+
+        return (
+          leftAligned &&
+          rightAligned &&
+          directlyBelow &&
+          similarWidth
+        );
+      };
+
+    const knownPopup =
+      knownPopups.find(
+        matchesDownloadButtonGeometry
+      );
 
     if (knownPopup) {
       return knownPopup;
     }
 
-    // Fallback for MakerWorld DOM variants whose popup container has no
-    // stable Material UI class or ARIA role.
+    // Structural fallback for a future MakerWorld version which no longer
+    // exposes the current Material UI classes or ARIA roles.
     //
-    // Search only for visible 3MF elements outside the primary button so the
-    // main "Download 3MF" button can never be mistaken for a dropdown item.
-    const candidates =
-      document.querySelectorAll(
-        [
-          'li',
-          'button',
-          'a',
-          'div',
-          'span',
-          '[role="menuitem"]',
-          '[role="option"]',
-        ].join(', ')
-      );
-
-    for (const element of candidates) {
-      if (!isVisible(element)) continue;
-
-      if (
-        element.closest(
-          'span.primaryButton'
+    // Restrict the search to visible DIVs positioned exactly like the
+    // download popup and require a descendant containing multiple visible
+    // rows. No translated menu text is used.
+    const structuralCandidates =
+      Array.from(
+        document.querySelectorAll(
+          'body > div, body > div > div'
         )
-      ) {
-        continue;
-      }
-
-      if (
-        !isMakerWorld3mfText(
-          element.textContent
-        )
-      ) {
-        continue;
-      }
-
-      // Prefer a real popup ancestor when one exists.
-      const popup =
-        element.closest(
-          [
-            '.MuiPopper-root',
-            '.MuiPopover-root',
-            '.MuiMenu-root',
-            '[role="tooltip"]',
-            '[role="menu"]',
-            '[role="listbox"]',
-          ].join(', ')
+      )
+        .filter(
+          element =>
+            isVisible(element) &&
+            !element.contains(
+              buttonRoot
+            ) &&
+            matchesDownloadButtonGeometry(
+              element
+            )
         );
 
-      if (
-        popup &&
-        isVisible(popup)
-      ) {
-        return popup;
-      }
+    for (
+      const candidate of
+      structuralCandidates
+    ) {
+      const hasMenuStructure =
+        Array.from(
+          candidate.querySelectorAll(
+            'div, ul, menu'
+          )
+        )
+          .some(container => {
+            if (!isVisible(container)) {
+              return false;
+            }
 
-      // Otherwise use the direct menu container around the detected item.
-      const container =
-        element.parentElement;
+            const visibleChildren =
+              Array.from(
+                container.children
+              )
+                .filter(isVisible);
 
-      if (
-        container &&
-        isVisible(container)
-      ) {
-        return container;
+            return (
+              visibleChildren.length >= 2 &&
+              visibleChildren.length <= 5
+            );
+          });
+
+      if (hasMenuStructure) {
+        return candidate;
       }
     }
 
     return null;
   }
+
 
   function isMakerWorldDropdownOpen() {
     return Boolean(
@@ -2676,23 +3036,139 @@ function createButtonIconSvg(state) {
   }
 
   function findMakerWorldMenuEntries(dropdown) {
-    const downloadItem =
-      findVisibleDownloadItem(dropdown);
+    if (
+      !dropdown ||
+      !isVisible(dropdown)
+    ) {
+      return [];
+    }
 
-    if (!downloadItem) return [];
+    const dropdownRect =
+      dropdown.getBoundingClientRect();
 
-    const container =
-      downloadItem.parentElement;
+    const containers =
+      [
+        dropdown,
+        ...dropdown.querySelectorAll(
+          'div, ul, menu, [role="menu"], [role="listbox"]'
+        ),
+      ];
 
-    if (!container) return [];
+    let bestEntries =
+      [];
 
-    const entries =
-      Array.from(container.children)
-        .filter(isVisible);
+    let bestScore =
+      Number.NEGATIVE_INFINITY;
 
-    return entries.length >= 3
-      ? entries.slice(0, 3)
-      : [];
+    for (
+      const container of
+      containers
+    ) {
+      if (!isVisible(container)) {
+        continue;
+      }
+
+      const entries =
+        Array.from(
+          container.children
+        )
+          .filter(isVisible);
+
+      // MakerWorld currently exposes two alternate actions below the primary
+      // action. Allow a small range so harmless future menu additions do not
+      // immediately break the adapter.
+      if (
+        entries.length < 2 ||
+        entries.length > 5
+      ) {
+        continue;
+      }
+
+      const containerRect =
+        container.getBoundingClientRect();
+
+      if (
+        containerRect.width <
+          dropdownRect.width * 0.7
+      ) {
+        continue;
+      }
+
+      let validRows =
+        true;
+
+      let matchingWidths =
+        0;
+
+      let totalArea =
+        0;
+
+      for (
+        const entry of
+        entries
+      ) {
+        const rect =
+          entry.getBoundingClientRect();
+
+        if (
+          rect.width <= 0 ||
+          rect.height <= 0 ||
+          rect.height > 120
+        ) {
+          validRows =
+            false;
+
+          break;
+        }
+
+        if (
+          rect.width >=
+          dropdownRect.width * 0.7
+        ) {
+          matchingWidths++;
+        }
+
+        totalArea +=
+          rect.width *
+          rect.height;
+      }
+
+      if (
+        !validRows ||
+        matchingWidths !==
+          entries.length
+      ) {
+        continue;
+      }
+
+      // Prefer a compact direct-row container over larger wrapper elements.
+      // Current MakerWorld resolves to the inner container holding exactly the
+      // two native action rows.
+      const score =
+        (
+          entries.length === 2
+            ? 100
+            : 50
+        ) +
+        Math.min(
+          40,
+          totalArea / 10000
+        ) -
+        container.children.length;
+
+      if (
+        score >
+        bestScore
+      ) {
+        bestScore =
+          score;
+
+        bestEntries =
+          entries;
+      }
+    }
+
+    return bestEntries;
   }
 
   function saveMenuEntryContents(entries) {
@@ -2749,6 +3225,12 @@ function createButtonIconSvg(state) {
 
     wrapper.style.flexDirection =
       'column';
+
+    wrapper.style.alignItems =
+      'center';
+
+    wrapper.style.textAlign =
+      'center';
 
     wrapper.style.gap =
       '2px';
@@ -2940,16 +3422,70 @@ function createButtonIconSvg(state) {
       return;
     }
 
-    const entries =
-      findMakerWorldMenuEntries(dropdown);
+    const nativeEntries =
+      findMakerWorldMenuEntries(
+        dropdown
+      );
 
-    if (entries.length < 3) {
+    if (
+      nativeEntries.length < 2
+    ) {
       console.warn(
         '[U1 Extension] MakerWorld dropdown entries could not be identified.'
       );
 
       return;
     }
+
+    const menuContainer =
+      nativeEntries[0]
+        .parentElement;
+
+    if (
+      !menuContainer ||
+      nativeEntries.some(
+        entry =>
+          entry.parentElement !==
+          menuContainer
+      )
+    ) {
+      console.warn(
+        '[U1 Extension] MakerWorld dropdown menu container could not be identified.'
+      );
+
+      return;
+    }
+
+    // MakerWorld exposes the currently selected action in the primary button,
+    // leaving only the two alternate actions inside the dropdown.
+    //
+    // The U1 error UI needs three rows:
+    //   Error
+    //   Suggestion
+    //   Report
+    //
+    // Clone one native row temporarily so the third row inherits MakerWorld's
+    // current sizing and styling without hard-coding generated CSS classes.
+    const reportEntry =
+      nativeEntries[
+        nativeEntries.length - 1
+      ].cloneNode(true);
+
+    reportEntry.setAttribute(
+      'data-u1-error-clone',
+      '1'
+    );
+
+    menuContainer.appendChild(
+      reportEntry
+    );
+
+    const entries =
+      [
+        nativeEntries[0],
+        nativeEntries[1],
+        reportEntry,
+      ];
 
     const code =
       String(
@@ -2975,7 +3511,10 @@ function createButtonIconSvg(state) {
     // Show a dedicated user-friendly instruction instead of the generic retry
     // message.
     if (
-      code === 'U1-DL-001' &&
+      (
+        code === 'U1-DL-003' ||
+        code === 'U1-DL-001'
+      ) &&
       /\b418\b/.test(
         String(
           error?.originalMessage ||
@@ -2989,7 +3528,12 @@ function createButtonIconSvg(state) {
     }
 
     const savedEntries =
-      saveMenuEntryContents(entries);
+      saveMenuEntryContents(
+        nativeEntries.slice(
+          0,
+          2
+        )
+      );
 
     // The first native MakerWorld entry can represent the currently selected
     // action and may therefore inherit a special or invisible text color.
@@ -3100,8 +3644,13 @@ function createButtonIconSvg(state) {
       dropdown,
       previousDropdownMarker,
       savedEntries,
+
       reportEntry:
         entries[2],
+
+      clonedEntry:
+        reportEntry,
+
       reportClickHandler,
     };
   }
@@ -3126,6 +3675,13 @@ function createButtonIconSvg(state) {
       restoreSavedMenuEntryContents(
         state.savedEntries
       );
+
+      if (
+        state.clonedEntry
+          ?.isConnected
+      ) {
+        state.clonedEntry.remove();
+      }
 
       if (state.dropdown?.isConnected) {
         if (

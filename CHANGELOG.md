@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
+## [1.6.0] - 2026-09-10
+
+### Fixed
+- Restored MakerWorld downloads after MakerWorld changed the authenticated 3MF download request from `fetch` to `XMLHttpRequest`.
+- Added XMLHttpRequest capture support while keeping the existing fetch capture as a fallback.
+- Prevented stale or cancelled download responses from satisfying later conversion attempts.
+- Improved MakerWorld download error handling with separate trigger, capture, HTTP, timeout and output-download error codes.
+- Fixed the conversion error dropdown after MakerWorld changed the structure of its download menu.
+
+### Improved
+- Made MakerWorld download-dropdown detection more robust by relying on structure and geometry instead of translated text or generated CSS class names.
+- Improved error reports with extension version, browser, capture transport, HTTP status and response type.
+- Added capture information to the project report.
+- Improved developer console output for successful XMLHttpRequest captures.
+
 ## [1.5.3] - 2026-08-06
 
 ### Added

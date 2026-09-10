@@ -208,6 +208,17 @@ function buildU1ErrorReportObject(
         null,
     },
 
+    environment: {
+      converterVersion:
+        metadata.converterVersion ||
+        'unknown',
+
+      browser:
+        metadata.browser ||
+        context.browser ||
+        'unknown',
+    },
+
     conversion: {
       id:
         diagnostics.id || null,
@@ -279,6 +290,9 @@ function buildU1ErrorReportText(
 
   const lines = [
     'MakerWorld to Snapmaker U1 — Error Report',
+    '',
+    `Extension version: ${report.environment.converterVersion}`,
+    `Browser: ${report.environment.browser}`,
     '',
     `Error code: ${report.summary.code}`,
     `Stage: ${report.summary.stageLabel}`,
@@ -509,6 +523,13 @@ function logU1ConversionError(
   console.log(
     'summary:',
     {
+      extensionVersion:
+        report.environment
+          .converterVersion,
+
+      browser:
+        report.environment.browser,
+
       errorCode:
         report.summary.code,
 

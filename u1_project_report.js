@@ -46,9 +46,27 @@ function logU1ProjectReport(project) {
         : `${conversionMs.toFixed(0)} ms`
       : null;
 
+  const diagnosticsMetadata =
+    project.options?.u1Diagnostics
+      ?.metadata ||
+    {};
+
   console.log('converter:', {
-    version: project.converter?.version || 'unknown',
+    version:
+      project.converter?.version ||
+      'unknown',
+
     conversionTime,
+
+    makerWorldCapture:
+      diagnosticsMetadata
+        .makerWorldCaptureTransport ||
+      'unknown',
+
+    captureHttpStatus:
+      diagnosticsMetadata
+        .makerWorldCaptureHttpStatus ??
+      null,
   });
 
   console.log('summary:', {
