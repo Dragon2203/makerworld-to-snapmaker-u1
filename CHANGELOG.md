@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
+## [1.6.1] - 2026-09-10
+
+### Improved
+- Added direct access to the converter settings by clicking the browser extension icon.
+
 ## [1.6.0] - 2026-09-10
 
 ### Fixed

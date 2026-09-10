@@ -11,6 +11,10 @@
 const isFirefoxBackground =
   chrome.runtime.getURL('').startsWith('moz-extension://');
 
+chrome.action.onClicked.addListener(() => {
+  chrome.runtime.openOptionsPage();
+});
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === 'u1_download') {
     chrome.downloads.download({
