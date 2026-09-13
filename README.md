@@ -153,6 +153,8 @@ The copied report contains all technical information required for bug reports, m
 
 The extension includes several optional settings to customize the conversion process.
 
+The settings page can be opened at any time by clicking the **MakerWorld to Snapmaker U1** extension icon in the browser toolbar.
+
 ### Print Profile Handling
 
 - **Preserve source print profile** *(recommended)*
@@ -174,6 +176,16 @@ Imported profiles are stored locally inside the browser and can be updated at an
 ### Filament Preset Mode
 
 Choose whether filament presets should be preserved whenever possible or converted to Generic material presets.
+
+### Force Converted Download Filename
+
+Chrome and other Chromium-based browsers can optionally force converted downloads to use the expected `.3mf` filename.
+
+This compatibility option is intended for cases where a converted project is downloaded with a random filename or without the `.3mf` extension.
+
+Leave this option disabled if converted downloads already use the correct filename.
+
+> **Note:** This option is only available in Chromium-based browsers. Firefox uses a separate download pipeline and does not require this workaround. Download-manager extensions may also interfere with filenames and should be checked if download problems persist.
 
 ---
 

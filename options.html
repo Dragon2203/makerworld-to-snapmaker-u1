@@ -425,6 +425,25 @@
   </div>
 
   <div class="option-row">
+    <label>
+      <input type="checkbox" id="forceDownloadFilename">
+      <span>Force converted download filename (Chromium only)</span>
+    </label>
+
+    <p class="hint">
+      Chromium compatibility option for Chrome, Edge and other Chromium-based
+      browsers. Forces converted downloads to use the expected .3mf filename.
+      Enable this if converted files are saved with a random filename or without
+      the .3mf extension. Leave this disabled when downloads already work correctly.
+    </p>
+
+    <p class="hint">
+      Download-manager extensions may also modify filenames. Disable this
+      option if it causes conflicts with another download extension.
+    </p>
+  </div>
+  
+  <div class="option-row">
     <label><input type="checkbox" id="smartProcessMerge"> <span>Merge changed process settings</span></label>
     <p class="hint">Imports compatible print-setting changes from the MakerWorld profile while keeping U1 machine settings from the selected U1 base profile.</p>
   </div>

@@ -46,6 +46,7 @@ function createButtonIconSvg(state) {
     forceBrimOff:          true,
     autoFixOrganicVariableLayer: true,
     fixMultiPlatePositioning: true,
+    forceDownloadFilename: false,
     debugReport:           true,
     deepDebugReport:       false,
     smartProcessMerge:    true,
@@ -476,6 +477,12 @@ function createButtonIconSvg(state) {
 
       filenameNormalizationChanged:
         downloadReport.normalizationChanged,
+
+      forceFilename:
+        downloadReport.forceFilename,
+
+      filenameForced:
+        downloadReport.filenameForced,
 
       downloadAttempts:
         downloadReport.attempts,
@@ -1744,6 +1751,14 @@ function createButtonIconSvg(state) {
         normalizationChanged:
           filenameFallback.changed,
 
+        forceFilename:
+          !isFirefox &&
+          currentSettings.forceDownloadFilename ===
+            true,
+
+        filenameForced:
+          false,
+
         failedAttempt:
           null,
 
@@ -1768,6 +1783,12 @@ function createButtonIconSvg(state) {
           downloadReport.fallbackAvailable,
 
         outputDownloadFallbackUsed:
+          false,
+
+        outputDownloadForceFilename:
+          downloadReport.forceFilename,
+
+        outputDownloadFilenameForced:
           false,
 
         outputDownloadAttempts:
@@ -1861,6 +1882,11 @@ function createButtonIconSvg(state) {
                       outUrl,
 
                     filename,
+
+                    forceFilename:
+                      currentSettings
+                        .forceDownloadFilename ===
+                      true,
                   },
                   response => {
                     if (
@@ -1912,6 +1938,9 @@ function createButtonIconSvg(state) {
 
           downloadId:
             null,
+
+          filenameForced:
+            false,
         };
 
         downloadReport.attempts.push(
@@ -1939,6 +1968,9 @@ function createButtonIconSvg(state) {
           filenameFallbackUsed:
             type === 'normalized-fallback',
 
+          forceFilename:
+            downloadReport.forceFilename,
+
           outputBytes:
             converted.byteLength,
         });
@@ -1962,6 +1994,17 @@ function createButtonIconSvg(state) {
           attempt.downloadId =
             response.downloadId ??
             null;
+
+          attempt.filenameForced =
+            response.filenameForced ===
+            true;
+
+          if (
+            attempt.filenameForced
+          ) {
+            downloadReport.filenameForced =
+              true;
+          }
 
           return {
             ok:
@@ -1996,6 +2039,9 @@ function createButtonIconSvg(state) {
           };
         } finally {
           diagnostics.setMetadata({
+            outputDownloadFilenameForced:
+              downloadReport.filenameForced,
+
             outputDownloadAttempts:
               downloadReport.attempts.map(
                 item => ({
@@ -2256,6 +2302,12 @@ function createButtonIconSvg(state) {
           outputDownloadFallbackUsed:
             downloadReport.fallbackUsed,
 
+          outputDownloadForceFilename:
+            downloadReport.forceFilename,
+
+          outputDownloadFilenameForced:
+            downloadReport.filenameForced,
+            
           outputDownloadFailedAttempt:
             null,
 

@@ -17,6 +17,7 @@ const DEFAULTS = {
   forceBrimOff:          true,
   autoFixOrganicVariableLayer: true,
   fixMultiPlatePositioning: true,
+  forceDownloadFilename:   false,
   debugReport:           true,
   deepDebugReport:       false,
   smartProcessMerge:    true,
@@ -430,6 +431,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     forceBrimOff:          document.getElementById('forceBrimOff')?.checked ?? true,
     autoFixOrganicVariableLayer: document.getElementById('autoFixOrganicVariableLayer')?.checked ?? true,
     fixMultiPlatePositioning: document.getElementById('fixMultiPlatePositioning')?.checked ?? true,
+    forceDownloadFilename: !chrome.runtime.getURL('').startsWith('moz-extension://') && (document.getElementById('forceDownloadFilename')?.checked === true),
     debugReport:           document.getElementById('debugReport')?.checked ?? true,
     deepDebugReport:       document.getElementById('deepDebugReport')?.checked ?? false,
     smartProcessMerge:     document.getElementById('smartProcessMerge')?.checked ?? true,
@@ -580,6 +582,32 @@ document.getElementById('printProfileModeForce')?.addEventListener('change', upd
   document.getElementById('fixMultiPlatePositioning').checked =
     s.fixMultiPlatePositioning;
 
+  const forceDownloadFilenameCheckbox =
+    document.getElementById(
+      'forceDownloadFilename'
+    );
+
+  const isFirefox =
+    chrome.runtime
+      .getURL('')
+      .startsWith(
+        'moz-extension://'
+      );
+
+  if (forceDownloadFilenameCheckbox) {
+    forceDownloadFilenameCheckbox.checked =
+      !isFirefox &&
+      s.forceDownloadFilename === true;
+
+    forceDownloadFilenameCheckbox.disabled =
+      isFirefox;
+
+    if (isFirefox) {
+      forceDownloadFilenameCheckbox.checked =
+        false;
+    }
+  }
+    
   document.getElementById('debugReport').checked = s.debugReport;
   document.getElementById('deepDebugReport').checked = s.deepDebugReport;
   document.getElementById('smartProcessMerge').checked = s.smartProcessMerge;

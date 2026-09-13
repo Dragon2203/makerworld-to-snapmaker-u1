@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
+## [1.6.2] - 2026-09-13
+
+### Added
+- Added an optional **Force converted download filename** compatibility setting for Chrome and other Chromium-based browsers.
+- Added explicit filename forcing for converted downloads to work around cases where Chromium saves the generated project with a random filename or without the `.3mf` extension.
+
+### Improved
+- Improved converted-file download diagnostics to report whether filename forcing was enabled and applied.
+- Clarified in the settings that filename forcing is only intended as a compatibility workaround and should remain disabled when downloads already work correctly.
+
 ## [1.6.1] - 2026-09-10
 
 ### Improved

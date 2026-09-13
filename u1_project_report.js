@@ -748,6 +748,13 @@ function logU1OutputDownloadReport(
       ? downloadReport.attempts
       : [];
 
+  const successfulAttempt =
+    attempts.find(
+      attempt =>
+        attempt.result === 'ok'
+    ) ||
+    null;
+
   console.groupCollapsed(
     '[U1 Project Report] output download'
   );
@@ -761,59 +768,23 @@ function logU1OutputDownloadReport(
       downloadReport.success ===
       true,
 
-    originalFilename:
+    expectedFilename:
+      downloadReport.finalFilename ||
       downloadReport.originalFilename ||
       null,
 
-    fallbackAvailable:
-      downloadReport.fallbackAvailable ===
+    forceFilename:
+      downloadReport.forceFilename ===
       true,
 
-    fallbackUsed:
-      downloadReport.fallbackUsed ===
+    filenameForced:
+      downloadReport.filenameForced ===
       true,
 
-    fallbackFilename:
-      downloadReport.fallbackFilename ||
+    downloadId:
+      successfulAttempt?.downloadId ??
       null,
-
-    finalFilename:
-      downloadReport.finalFilename ||
-      null,
-
-    failedAttempt:
-      downloadReport.failedAttempt ||
-      null,
-
-    downloadAttempts:
-      attempts.length,
   });
-
-  if (attempts.length) {
-    console.table(
-      attempts.map(
-        attempt => ({
-          attempt:
-            attempt.attempt,
-
-          type:
-            attempt.type,
-
-          filename:
-            attempt.filename,
-
-          result:
-            attempt.result,
-
-          error:
-            attempt.error,
-
-          downloadId:
-            attempt.downloadId,
-        })
-      )
-    );
-  }
 
   if (
     downloadReport.fallbackUsed ===
@@ -822,19 +793,12 @@ function logU1OutputDownloadReport(
     console.log(
       'filename normalization:',
       {
-        reason:
-          'The browser rejected the original filename as invalid.',
-
         original:
           downloadReport.originalFilename ||
           null,
 
         normalized:
           downloadReport.fallbackFilename ||
-          null,
-
-        final:
-          downloadReport.finalFilename ||
           null,
       }
     );
