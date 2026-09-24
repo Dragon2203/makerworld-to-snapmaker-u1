@@ -322,6 +322,18 @@ The generated project opens as a normal Snapmaker Orca or Orca project and is re
 ![Orca](screenshots/orca.png)
 ---
 
+## Support the Project
+
+MakerWorld to Snapmaker U1 is developed and maintained in my free time and is available completely free of charge.
+
+If you find the extension useful and would like to support its continued development, you can buy me a coffee. Any support is greatly appreciated, but never required.
+
+<a href="https://www.buymeacoffee.com/dragon2203" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="60">
+</a>
+
+---
+
 ## Credits
 
 This project builds upon earlier community work.
