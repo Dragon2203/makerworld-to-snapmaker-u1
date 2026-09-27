@@ -29,6 +29,7 @@ const DEFAULTS = {
 let customPrinterProfiles = {};
 let orcaCustomPrinterProfiles = {};
 let pendingPrinterProfileFiles = [];
+let availableProcessProfiles = [];
 
 // ── Small storage helpers ─────────────────────────────────────────────────────
 
@@ -65,30 +66,95 @@ function setStatus(text, isError = false) {
 
 // ── Print profile section ─────────────────────────────────────────────
 
-async function loadProfiles(savedForcedProfileId) {
+async function loadProfiles() {
   const loading = document.getElementById('profilesLoading');
-  const select  = document.getElementById('forcedProfileId');
+  const select = document.getElementById('forcedProfileId');
 
   try {
-    const profiles = await fetch(chrome.runtime.getURL('assets/profiles.json')).then(r => r.json());
-
-    select.replaceChildren();
-
-    profiles.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value       = p.id;
-      opt.textContent = p.display;
-      if (p.id === savedForcedProfileId) opt.selected = true;
-      select.appendChild(opt);
-    });
-
-    if (!select.value && profiles.length) select.value = profiles[0].id;
+    availableProcessProfiles = await fetch(
+      chrome.runtime.getURL('assets/profiles.json')
+    ).then(r => r.json());
 
     loading.style.display = 'none';
-    select.style.display  = 'block';
+    select.style.display = 'block';
   } catch (err) {
+    availableProcessProfiles = [];
     loading.textContent = 'Could not load profiles.';
     console.error('[U1 options] profile load failed:', err);
+  }
+}
+
+function getSelectedTargetNozzle() {
+  const orcaCompatibility =
+    document.getElementById('orcaCompatibility')?.checked === true;
+
+  const profileMap = orcaCompatibility
+    ? orcaCustomPrinterProfiles
+    : customPrinterProfiles;
+
+  const selectId = orcaCompatibility
+    ? 'orcaCustomPrinterProfileId'
+    : 'customPrinterProfileId';
+
+  const selectedProfileId =
+    document.getElementById(selectId)?.value ||
+    U1_CUSTOM_PRINTER_STANDARD_ID;
+
+  const customProfile =
+    selectedProfileId === U1_CUSTOM_PRINTER_STANDARD_ID
+      ? null
+      : profileMap[selectedProfileId] || null;
+
+  return getU1TargetNozzleDiameter(customProfile);
+}
+
+function updateForcedProfileOptions(preferredProfileId = '') {
+  const select = document.getElementById('forcedProfileId');
+  if (!select) return;
+
+  const targetNozzle = getSelectedTargetNozzle();
+  const nozzleDiameter = targetNozzle.nozzleDiameter || '0.4';
+
+  const matchingProfiles = availableProcessProfiles.filter(
+    profile => String(profile.nozzle || '0.4') === nozzleDiameter
+  );
+
+  const previousValue = preferredProfileId || select.value;
+
+  select.replaceChildren();
+
+  matchingProfiles.forEach(profile => {
+    const option = document.createElement('option');
+    option.value = profile.id;
+    option.textContent = profile.display;
+    select.appendChild(option);
+  });
+
+  if (
+    previousValue &&
+    matchingProfiles.some(profile => profile.id === previousValue)
+  ) {
+    select.value = previousValue;
+    return;
+  }
+
+  const defaultProfileId = {
+    '0.2': '0.10mm-standard-0.2',
+    '0.4': '0.20mm-standard',
+    '0.6': '0.30mm-standard-0.6',
+    '0.8': '0.40mm-standard-0.8',
+  }[nozzleDiameter];
+
+  if (
+    defaultProfileId &&
+    matchingProfiles.some(profile => profile.id === defaultProfileId)
+  ) {
+    select.value = defaultProfileId;
+    return;
+  }
+
+  if (matchingProfiles.length) {
+    select.value = matchingProfiles[0].id;
   }
 }
 
@@ -364,6 +430,7 @@ async function importCustomPrinterProfileFiles(fileList, target) {
 
   renderBothPrinterProfileSelects(currentSaved);
   updatePrinterProfileUi();
+  updateForcedProfileOptions();
 
   if (errors.length) {
     console.warn('[U1 options] custom printer profile import errors:', errors);
@@ -407,6 +474,7 @@ async function deleteSelectedCustomPrinterProfile(target) {
 
   renderBothPrinterProfileSelects(saved);
   updatePrinterProfileUi();
+  updateForcedProfileOptions();
 
   await setSyncStorage(
     isOrca
@@ -489,7 +557,9 @@ document.getElementById('customPrinterProfileId')?.addEventListener('change', (e
     infoId: 'customPrinterProfileInfo',
     savedId: event.target.value,
   });
+
   updatePrinterProfileUi();
+  updateForcedProfileOptions();
 });
 
 document.getElementById('orcaCustomPrinterProfileId')?.addEventListener('change', (event) => {
@@ -501,9 +571,13 @@ document.getElementById('orcaCustomPrinterProfileId')?.addEventListener('change'
     savedId: event.target.value,
   });
   updatePrinterProfileUi();
+  updateForcedProfileOptions();
 });
 
-document.getElementById('orcaCompatibility')?.addEventListener('change', updatePrinterProfileUi);
+document.getElementById('orcaCompatibility')?.addEventListener('change', () => {
+  updatePrinterProfileUi();
+  updateForcedProfileOptions();
+});
 document.getElementById('printProfileModePreserve')?.addEventListener('change', updatePrintProfileUi);
 document.getElementById('printProfileModeForce')?.addEventListener('change', updatePrintProfileUi);
 
@@ -613,10 +687,13 @@ document.getElementById('printProfileModeForce')?.addEventListener('change', upd
   document.getElementById('smartProcessMerge').checked = s.smartProcessMerge;
   document.getElementById('strictProcessMerge').checked = s.strictProcessMerge;
 
-  await loadProfiles(s.forcedProfileId || '0.20mm-standard');
-  updatePrintProfileUi();
-
   await loadCustomPrinterProfiles();
   renderBothPrinterProfileSelects(s);
   updatePrinterProfileUi();
+
+  await loadProfiles();
+  updateForcedProfileOptions(
+    s.forcedProfileId || '0.20mm-standard'
+  );
+  updatePrintProfileUi();
 })();

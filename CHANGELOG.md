@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
+## [1.7.0] - 2026-09-27
+
+### Added
+- Added multi-nozzle process profile support for Snapmaker U1 **0.2 mm, 0.4 mm, 0.6 mm and 0.8 mm** nozzle configurations.
+- Added dedicated Snapmaker U1 process profile families for 0.2 mm, 0.6 mm and 0.8 mm nozzles.
+- Custom Snapmaker U1 and OrcaSlicer printer profiles now automatically determine the target nozzle size from their inherited U1 printer profile.
+- Forced print profile selection now automatically shows the process profiles available for the selected target nozzle.
+
+### Improved
+- Improved source print profile detection to prioritize the project's active `print_settings_id` before `default_print_profile`.
+- Improved Preserve mode with nozzle-specific layer-height matching and safe fallback profiles for each supported U1 nozzle size.
+- Improved compatibility with the streamlined Snapmaker Orca 2.4 process profiles while retaining compatibility with older Snapmaker Orca versions.
+- Improved process profile diagnostics with the detected target nozzle, nozzle source and selected process profile asset.
+
+### Fixed
+- Fixed converted projects potentially selecting the wrong U1 process profile when `default_print_profile` differed from the project's active print profile.
+- Removed the remaining hard-coded 0.4 mm process profile fallback to prevent incorrect cross-nozzle profile selection.
+
 ## [1.6.2] - 2026-09-13
 
 ### Added

@@ -169,6 +169,9 @@ function logU1ProjectReport(project) {
 
   console.groupCollapsed('printer profile');
 
+  const targetNozzle =
+    project.analysis?.targetNozzle || null;
+
   const requestedPrinterProfile =
     printerProfile?.requested ||
     U1_CUSTOM_PRINTER_STANDARD_ID;
@@ -194,6 +197,17 @@ function logU1ProjectReport(project) {
 
     inheritedFrom:
       printerProfile.inheritedFrom || null,
+
+    targetNozzle:
+      targetNozzle?.nozzleDiameter
+        ? `${targetNozzle.nozzleDiameter} mm`
+        : null,
+
+    targetNozzleSource:
+      targetNozzle?.source || null,
+
+    processProfileAsset:
+      targetNozzle?.processProfileId || null,
 
     customProfileApplied:
       !standardPrinterProfileSelected &&
@@ -833,33 +847,66 @@ function formatPrintProfileSummaryForReport(processPreset = {}) {
   if (mode === 'force') {
     return {
       mode: 'Force U1 print profile',
-      forcedProfile: processPreset.resolved_u1_profile || null,
-      forcedProfileId: processPreset.forcedProfileId || null,
+
+      sourcePrintSettingsId:
+        processPreset.source_print_settings_id ||
+        null,
+
+      sourceDefaultPrintProfile:
+        processPreset.source_default_print_profile ||
+        null,
+
+      forcedProfile:
+        processPreset.resolved_u1_profile ||
+        null,
+
+      forcedProfileId:
+        processPreset.forcedProfileId ||
+        null,
+
       ignoredSource:
         processPreset.source_ignored ||
         processPreset.source_default_print_profile ||
         processPreset.source_print_settings_id ||
         null,
-      resolvedU1Profile: processPreset.resolved_u1_profile || null,
-      reason: 'User selected Force U1 print profile',
+
+      resolvedU1Profile:
+        processPreset.resolved_u1_profile ||
+        null,
+
+      reason:
+        'User selected Force U1 print profile',
     };
   }
 
   return {
     mode: 'Preserve source print profile',
-    detectedSource:
-      processPreset.selected_source_profile ||
-      processPreset.source_default_print_profile ||
+
+    sourcePrintSettingsId:
       processPreset.source_print_settings_id ||
       null,
-    resolvedU1Profile: processPreset.resolved_u1_profile || null,
+
+    sourceDefaultPrintProfile:
+      processPreset.source_default_print_profile ||
+      null,
+
+    selectedSource:
+      processPreset.selected_source_profile ||
+      null,
+
+    resolvedU1Profile:
+      processPreset.resolved_u1_profile ||
+      null,
+
     detection:
-      processPreset.selection_reason === 'default_print_profile'
-        ? 'default_print_profile'
-        : processPreset.selection_reason === 'print_settings_id'
-          ? 'print_settings_id'
-          : processPreset.selection_reason || null,
-    fallback: processPreset.fallback === true,
+      processPreset.selection_reason ||
+      null,
+
+    layerFallback:
+      processPreset.layer_fallback === true,
+
+    fallback:
+      processPreset.fallback === true,
   };
 }
 

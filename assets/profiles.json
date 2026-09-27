@@ -1,52 +1,179 @@
 ﻿[
     {
-        "id":  "0.08mm-extra-fine",
-        "display":  "0.08mm Extra Fine",
-        "file":  "profiles/0.08mm-extra-fine.json"
+        "id": "0.06mm-high-quality-0.2",
+        "display": "0.06mm High Quality",
+        "file": "profiles/0.06mm-high-quality-0.2.json",
+        "nozzle": "0.2"
     },
     {
-        "id":  "0.08mm-high-quality",
-        "display":  "0.08mm High Quality",
-        "file":  "profiles/0.08mm-high-quality.json"
+        "id": "0.06mm-standard-0.2",
+        "display": "0.06mm Standard",
+        "file": "profiles/0.06mm-standard-0.2.json",
+        "nozzle": "0.2"
     },
     {
-        "id":  "0.12mm-fine",
-        "display":  "0.12mm Fine",
-        "file":  "profiles/0.12mm-fine.json"
+        "id": "0.08mm-high-quality-0.2",
+        "display": "0.08mm High Quality",
+        "file": "profiles/0.08mm-high-quality-0.2.json",
+        "nozzle": "0.2"
     },
     {
-        "id":  "0.12mm-high-quality",
-        "display":  "0.12mm High Quality",
-        "file":  "profiles/0.12mm-high-quality.json"
+        "id": "0.08mm-standard-0.2",
+        "display": "0.08mm Standard",
+        "file": "profiles/0.08mm-standard-0.2.json",
+        "nozzle": "0.2"
     },
     {
-        "id":  "0.16mm-high-quality",
-        "display":  "0.16mm High Quality",
-        "file":  "profiles/0.16mm-high-quality.json"
+        "id": "0.10mm-high-quality-0.2",
+        "display": "0.10mm High Quality",
+        "file": "profiles/0.10mm-high-quality-0.2.json",
+        "nozzle": "0.2"
     },
     {
-        "id":  "0.16mm-optimal",
-        "display":  "0.16mm Optimal",
-        "file":  "profiles/0.16mm-optimal.json"
+        "id": "0.10mm-standard-0.2",
+        "display": "0.10mm Standard",
+        "file": "profiles/0.10mm-standard-0.2.json",
+        "nozzle": "0.2"
     },
     {
-        "id":  "0.20mm-standard",
-        "display":  "0.20mm Standard",
-        "file":  "profiles/0.20mm-standard.json"
+        "id": "0.12mm-standard-0.2",
+        "display": "0.12mm Standard",
+        "file": "profiles/0.12mm-standard-0.2.json",
+        "nozzle": "0.2"
     },
     {
-        "id":  "0.20mm-strength",
-        "display":  "0.20mm Strength",
-        "file":  "profiles/0.20mm-strength.json"
+        "id": "0.14mm-standard-0.2",
+        "display": "0.14mm Standard",
+        "file": "profiles/0.14mm-standard-0.2.json",
+        "nozzle": "0.2"
+    },
+
+    {
+        "id": "0.08mm-extra-fine",
+        "display": "0.08mm Extra Fine",
+        "file": "profiles/0.08mm-extra-fine.json",
+        "nozzle": "0.4"
     },
     {
-        "id":  "0.24mm-draft",
-        "display":  "0.24mm Draft",
-        "file":  "profiles/0.24mm-draft.json"
+        "id": "0.08mm-high-quality",
+        "display": "0.08mm High Quality",
+        "file": "profiles/0.08mm-high-quality.json",
+        "nozzle": "0.4"
     },
     {
-        "id":  "0.28mm-extra-draft",
-        "display":  "0.28mm Extra Draft",
-        "file":  "profiles/0.28mm-extra-draft.json"
+        "id": "0.12mm-fine",
+        "display": "0.12mm Fine",
+        "file": "profiles/0.12mm-fine.json",
+        "nozzle": "0.4"
+    },
+    {
+        "id": "0.12mm-high-quality",
+        "display": "0.12mm High Quality",
+        "file": "profiles/0.12mm-high-quality.json",
+        "nozzle": "0.4"
+    },
+    {
+        "id": "0.16mm-high-quality",
+        "display": "0.16mm High Quality",
+        "file": "profiles/0.16mm-high-quality.json",
+        "nozzle": "0.4"
+    },
+    {
+        "id": "0.16mm-optimal",
+        "display": "0.16mm Optimal",
+        "file": "profiles/0.16mm-optimal.json",
+        "nozzle": "0.4"
+    },
+    {
+        "id": "0.20mm-standard",
+        "display": "0.20mm Standard",
+        "file": "profiles/0.20mm-standard.json",
+        "nozzle": "0.4"
+    },
+    {
+        "id": "0.20mm-strength",
+        "display": "0.20mm Strength",
+        "file": "profiles/0.20mm-strength.json",
+        "nozzle": "0.4"
+    },
+    {
+        "id": "0.24mm-draft",
+        "display": "0.24mm Draft",
+        "file": "profiles/0.24mm-draft.json",
+        "nozzle": "0.4"
+    },
+    {
+        "id": "0.28mm-extra-draft",
+        "display": "0.28mm Extra Draft",
+        "file": "profiles/0.28mm-extra-draft.json",
+        "nozzle": "0.4"
+    },
+
+    {
+        "id": "0.18mm-standard-0.6",
+        "display": "0.18mm Standard",
+        "file": "profiles/0.18mm-standard-0.6.json",
+        "nozzle": "0.6"
+    },
+    {
+        "id": "0.24mm-standard-0.6",
+        "display": "0.24mm Standard",
+        "file": "profiles/0.24mm-standard-0.6.json",
+        "nozzle": "0.6"
+    },
+    {
+        "id": "0.30mm-standard-0.6",
+        "display": "0.30mm Standard",
+        "file": "profiles/0.30mm-standard-0.6.json",
+        "nozzle": "0.6"
+    },
+    {
+        "id": "0.30mm-strength-0.6",
+        "display": "0.30mm Strength",
+        "file": "profiles/0.30mm-strength-0.6.json",
+        "nozzle": "0.6"
+    },
+    {
+        "id": "0.36mm-standard-0.6",
+        "display": "0.36mm Standard",
+        "file": "profiles/0.36mm-standard-0.6.json",
+        "nozzle": "0.6"
+    },
+    {
+        "id": "0.42mm-standard-0.6",
+        "display": "0.42mm Standard",
+        "file": "profiles/0.42mm-standard-0.6.json",
+        "nozzle": "0.6"
+    },
+
+    {
+        "id": "0.24mm-standard-0.8",
+        "display": "0.24mm Standard",
+        "file": "profiles/0.24mm-standard-0.8.json",
+        "nozzle": "0.8"
+    },
+    {
+        "id": "0.32mm-standard-0.8",
+        "display": "0.32mm Standard",
+        "file": "profiles/0.32mm-standard-0.8.json",
+        "nozzle": "0.8"
+    },
+    {
+        "id": "0.40mm-standard-0.8",
+        "display": "0.40mm Standard",
+        "file": "profiles/0.40mm-standard-0.8.json",
+        "nozzle": "0.8"
+    },
+    {
+        "id": "0.48mm-standard-0.8",
+        "display": "0.48mm Standard",
+        "file": "profiles/0.48mm-standard-0.8.json",
+        "nozzle": "0.8"
+    },
+    {
+        "id": "0.56mm-standard-0.8",
+        "display": "0.56mm Standard",
+        "file": "profiles/0.56mm-standard-0.8.json",
+        "nozzle": "0.8"
     }
 ]

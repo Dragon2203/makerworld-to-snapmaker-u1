@@ -73,15 +73,19 @@ The goal is simple:
 
 ✔ Supports custom Snapmaker Orca and OrcaSlicer printer profiles
 
+✔ Supports Snapmaker U1 0.2 mm, 0.4 mm, 0.6 mm and 0.8 mm nozzle configurations
+
 ---
 
 ## Features
 
 ### Preserve the original project
 
-The converter automatically detects the original MakerWorld print profile and selects the matching Snapmaker U1 system profile.
+The converter automatically detects the original MakerWorld print profile and selects the matching Snapmaker U1 system profile for the selected target nozzle.
 
 Compatible process settings are preserved automatically, allowing converted projects to stay as close as possible to the creator's original intent.
+
+Process profiles are matched independently for supported **0.2 mm, 0.4 mm, 0.6 mm and 0.8 mm** Snapmaker U1 nozzle configurations.
 
 The converter does not recreate print settings from scratch. Instead, it starts with the creator's original project and only modifies settings that are required for Snapmaker Orca compatibility.
 
@@ -159,17 +163,21 @@ The settings page can be opened at any time by clicking the **MakerWorld to Snap
 
 - **Preserve source print profile** *(recommended)*
 
-  Automatically detects the original print profile contained in the MakerWorld project and selects the closest matching Snapmaker U1 system profile.
+  Automatically detects the original print profile contained in the MakerWorld project and selects the closest matching Snapmaker U1 system profile for the selected target nozzle.
 
 - **Force U1 print profile**
 
-  Always use a specific Snapmaker U1 print profile as the conversion base.
+  Always use a specific Snapmaker U1 print profile as the conversion base. Available profiles are automatically filtered to match the nozzle size of the selected target printer profile.
 
 ### Custom U1 Printer Profiles
 
 Import your own custom printer profiles from either Snapmaker Orca or regular OrcaSlicer.
 
-The converter stores both profile types separately and uses the corresponding profile depending on whether Orca Compatibility is enabled.
+Custom profiles based on the official **Snapmaker U1 0.2 mm, 0.4 mm, 0.6 mm or 0.8 mm** printer profiles are supported. The converter automatically detects the target nozzle from the U1 printer profile the custom profile inherits from and selects the corresponding process profile family.
+
+This means the selected target printer profile determines the nozzle used for conversion — the nozzle is not taken from the original MakerWorld printer.
+
+The converter stores Snapmaker Orca and OrcaSlicer profiles separately and uses the corresponding profile depending on whether Orca Compatibility is enabled.
 
 Imported profiles are stored locally inside the browser and can be updated at any time by importing them again.
 

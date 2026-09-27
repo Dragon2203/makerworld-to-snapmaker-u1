@@ -484,7 +484,7 @@ function applyFinalU1FilamentPass(
   }
 
   for (let i = 0; i < targetFilamentCount; i++) {
-    combined.inherits_group[i] = '';
+    ensureArray('inherits_group')[i] = '';
   }
 
   const processDiff = parseDifferentSettingsToSystem(

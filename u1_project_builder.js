@@ -25,12 +25,25 @@ async function buildU1Project(input, opts = {}) {
     ...(opts?.converterOptions || {}),
   };
 
-  const processProfileResolution = resolveU1ProcessProfile(
-    origSettings,
-    converterOptions
+  const targetNozzle = getU1TargetNozzleDiameter(
+    converterOptions.customPrinterProfile || null
   );
 
-  const profileId = processProfileResolution.profileId || '0.20mm-standard';
+  const processProfileResolution = resolveU1ProcessProfile(
+    origSettings,
+    {
+      ...converterOptions,
+      targetNozzle,
+    }
+  );
+
+  const profileId = processProfileResolution.profileId;
+
+  if (!profileId) {
+    throw new Error(
+      `No U1 process profile could be resolved for target nozzle ${targetNozzle.nozzleDiameter || 'unknown'}.`
+    );
+  }
 
   const diff = origSettings.different_settings_to_system || [];
   const hasSupport = Array.isArray(diff)
@@ -41,17 +54,30 @@ async function buildU1Project(input, opts = {}) {
 // Resolve U1 process profile
 // -----------------------------------------------------------------------------
   let u1Settings;
+
   try {
-    u1Settings = await fetch(chrome.runtime.getURL(`assets/profiles/${profileId}.json`)).then(r => {
-      if (!r.ok) throw new Error(r.status);
+    u1Settings = await fetch(
+      chrome.runtime.getURL(`assets/profiles/${profileId}.json`)
+    ).then(r => {
+      if (!r.ok) {
+        throw new Error(`HTTP ${r.status}`);
+      }
+
       return r.json();
     });
-  } catch {
-    u1Settings = await fetch(chrome.runtime.getURL('assets/u1_template.json')).then(r => r.json());
+  } catch (error) {
+    throw new Error(
+      `Could not load resolved U1 process profile "${profileId}" ` +
+      `for target nozzle ${targetNozzle.nozzleDiameter || 'unknown'}: ` +
+      `${error?.message || error}`
+    );
   }
 
   if (hasSupport) {
-    u1Settings = { ...u1Settings, enable_support: '1' };
+    u1Settings = {
+      ...u1Settings,
+      enable_support: '1',
+    };
   }
 
 // -----------------------------------------------------------------------------
@@ -228,6 +254,14 @@ async function buildU1Project(input, opts = {}) {
 
   project.analysis = {
     ...(project.analysis || {}),
+
+    targetNozzle: {
+      nozzleDiameter: targetNozzle.nozzleDiameter || null,
+      source: targetNozzle.source || null,
+      inheritedFrom: targetNozzle.inheritedFrom || null,
+      processProfileId: profileId || null,
+    },
+
     processPreset: processPresetReport,
     processMerge: processMergeReport,
     filamentPreset: filamentPresetReport,

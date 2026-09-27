@@ -28,6 +28,40 @@ function normalizeCustomPrinterProfileName(raw) {
   return String(raw || '').trim();
 }
 
+function getU1TargetNozzleDiameter(customPrinterProfile = null) {
+  const standardNozzleDiameter = '0.4';
+
+  if (!customPrinterProfile) {
+    return {
+      nozzleDiameter: standardNozzleDiameter,
+      source: 'standard',
+      inheritedFrom: '',
+    };
+  }
+
+  const inheritedFrom = normalizeCustomPrinterProfileName(
+    customPrinterProfile.inheritedFrom || ''
+  );
+
+  const nozzleMatch = inheritedFrom.match(
+    /^Snapmaker U1 \((0\.2|0\.4|0\.6|0\.8) nozzle\)$/i
+  );
+
+  if (nozzleMatch) {
+    return {
+      nozzleDiameter: nozzleMatch[1],
+      source: 'inherits',
+      inheritedFrom,
+    };
+  }
+
+  return {
+    nozzleDiameter: standardNozzleDiameter,
+    source: 'fallback',
+    inheritedFrom,
+  };
+}
+
 function getCustomPrinterProfileId(json, fallbackName = '') {
   return normalizeCustomPrinterProfileName(
     json?.printer_settings_id ||
