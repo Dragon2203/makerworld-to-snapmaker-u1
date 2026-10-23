@@ -1873,6 +1873,19 @@ function createButtonIconSvg(state) {
           filename =>
             new Promise(
               (resolve, reject) => {
+                if (currentSettings.forceDownloadFilename === true) {
+                  // A native Blob download preserves the filename without
+                  // competing with download-manager extensions. Keep the link
+                  // detached: injected.js blocks connected download links in U1 mode.
+                  const link = document.createElement('a');
+                  link.href = outUrl;
+                  link.download = filename;
+                  link.click();
+
+                  resolve({ ok: true, filenameForced: true });
+                  return;
+                }
+
                 chrome.runtime.sendMessage(
                   {
                     type:
@@ -1882,11 +1895,6 @@ function createButtonIconSvg(state) {
                       outUrl,
 
                     filename,
-
-                    forceFilename:
-                      currentSettings
-                        .forceDownloadFilename ===
-                      true,
                   },
                   response => {
                     if (
@@ -2053,10 +2061,23 @@ function createButtonIconSvg(state) {
       }
 
       try {
+        // Native links do not report invalid-filename errors, so normalize
+        // before clicking instead of waiting for the download API to reject it.
+        const normalizeBeforeDownload =
+          downloadReport.forceFilename &&
+          downloadReport.fallbackAvailable;
+
+        downloadReport.fallbackUsed =
+          normalizeBeforeDownload;
+
         const originalAttempt =
           await runOutputDownloadAttempt(
-            'original',
-            downloadReport.originalFilename
+            normalizeBeforeDownload
+              ? 'normalized-fallback'
+              : 'original',
+            normalizeBeforeDownload
+              ? downloadReport.fallbackFilename
+              : downloadReport.originalFilename
           );
 
         if (originalAttempt.ok) {
@@ -2064,8 +2085,9 @@ function createButtonIconSvg(state) {
             true;
 
           downloadReport.finalFilename =
-            downloadReport.originalFilename;
+            originalAttempt.attempt.filename;
         } else if (
+          !normalizeBeforeDownload &&
           isU1InvalidFilenameError(
             originalAttempt.error
           ) &&
@@ -2261,17 +2283,17 @@ function createButtonIconSvg(state) {
           }
         } else {
           downloadReport.failedAttempt =
-            'original';
+            originalAttempt.attempt.type;
 
           downloadReport.finalFilename =
-            downloadReport.originalFilename;
+            originalAttempt.attempt.filename;
 
           diagnostics.setMetadata({
             outputDownloadFinalFilename:
               downloadReport.finalFilename,
 
             outputDownloadFallbackUsed:
-              false,
+              downloadReport.fallbackUsed,
 
             outputDownloadFailedAttempt:
               downloadReport.failedAttempt,

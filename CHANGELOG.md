@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
+## [Unreleased]
+
+### Fixed
+- Use a native Blob download for Chromium's **Force converted download filename** option to preserve `.3mf` filenames without competing with download-manager extensions such as Free Download Manager.
+
 ## [1.7.0] - 2026-09-27
 
 ### Added

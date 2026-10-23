@@ -191,6 +191,8 @@ Chrome and other Chromium-based browsers can optionally force converted download
 
 This compatibility option is intended for cases where a converted project is downloaded with a random filename or without the `.3mf` extension.
 
+When enabled, the converted Blob is saved through a native download link instead of competing with download-manager extensions for the filename. Unsupported filename characters are normalized before saving.
+
 Leave this option disabled if converted downloads already use the correct filename.
 
 > **Note:** This option is only available in Chromium-based browsers. Firefox uses a separate download pipeline and does not require this workaround. Download-manager extensions may also interfere with filenames and should be checked if download problems persist.
