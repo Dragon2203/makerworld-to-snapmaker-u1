@@ -18,13 +18,22 @@ The extension operates on MakerWorld model pages to:
    JavaScript logic.
 4. Trigger a file download of the converted `.3mf` to the user's device.
 
+For local file conversion, users can manually select or drag and drop an
+existing `.3mf` file into the extension's settings page. The file is read,
+converted and downloaded entirely within the browser without being uploaded
+to an external conversion service.
+
 ## Data the extension accesses
 
 | Data | Purpose | Stored? | Transmitted? |
 |---|---|---|---|
-| MakerWorld page DOM | Inject U1 carousel option and intercept download | No | No |
-| `.3mf` file downloaded from MakerWorld | In-browser conversion | No | No |
-| Extension settings (print profile, converter options and user preferences) | User preferences | Browser storage only | No |
+| MakerWorld page DOM | Integrate the U1 conversion option and detect download actions | No | No |
+| MakerWorld `.3mf` project files | In-browser conversion | No | No additional transmission by the extension |
+| User-selected local `.3mf` files | In-browser conversion | No | No |
+| Extension settings and preferences | Preserve user configuration | Browser sync storage | May be synced by the browser |
+| Imported custom printer profiles | Apply user-defined printer settings during conversion | Browser local storage | No |
+| Conversion diagnostics and error reports | Display conversion information and help troubleshoot problems | Temporarily in browser memory | Only if manually shared by the user |
+
 
 ## Credentials and authentication
 
@@ -45,23 +54,66 @@ this project.
 
 ## Extension storage
 
-User settings (selected print profile, converter options, filament preset mode 
-and other user preferences) are stored in `chrome.storage.sync`. This storage is managed by
-the browser and may be synced across devices by the browser's built-in sync
-feature if the user has browser sync enabled. No settings data is transmitted
-to servers operated by this project.
+The extension uses the browser's built-in extension storage APIs to preserve
+user settings and imported custom printer profiles.
+
+### User settings
+
+General converter settings, including print profile selection, filament
+handling preferences, compatibility options and other user preferences,
+are stored in `chrome.storage.sync`.
+
+This storage is managed by the browser and may be synchronized across devices
+through the browser's built-in synchronization feature if enabled by the user.
+
+### Custom printer profiles
+
+Custom printer profiles manually imported by the user are stored in
+`chrome.storage.local`.
+
+Profiles for Snapmaker Orca and OrcaSlicer are stored separately.
+
+These imported profiles remain in the browser's local extension storage
+and are not uploaded to servers operated by this project.
+
+### Temporary download state
+
+The extension may temporarily store download-related state using the browser's
+session storage to manage active downloads.
+
+No extension settings or imported printer profiles are transmitted to
+servers operated by this project.
 
 ## Analytics and telemetry
 
 This extension does not include analytics, crash reporting, telemetry, or
-remote error reporting of any kind.
+automatic remote error reporting of any kind.
+
+## Diagnostic reports
+
+The extension can generate conversion reports and detailed error reports
+to help users understand conversion results and troubleshoot problems.
+
+These reports may contain technical information such as file names, file
+sizes, conversion settings, processing stages, error messages and
+browser-related information.
+
+Reports are generated locally in the browser and are not automatically
+transmitted to the developer or any external reporting service.
+
+Users may manually copy and share these reports, for example when
+submitting a GitHub issue.
+
+Users should review diagnostic reports before sharing them publicly.
 
 ## Third-party services
 
 The extension interacts only with:
 
-- **MakerWorld** (`makerworld.com`) — to intercept the user-initiated download
-- **Chrome extension APIs** — for storage and downloads
+- **MakerWorld** (`makerworld.com` and `makerworld.com.cn`) — to integrate
+  conversion functionality and process user-initiated project downloads.
+- **Browser extension APIs** — for storing settings, managing imported
+  printer profiles and downloading converted files.
 
 No other third-party services are contacted by this extension.
 
