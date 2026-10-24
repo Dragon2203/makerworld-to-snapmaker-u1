@@ -1938,6 +1938,28 @@ async function convertToU1(inputBuffer, opts = {}) {
   project.converter.diagnostics =
     diagnostics.snapshot();
 
+  // ---------------------------------------------------------------------------
+  // Optional project report callback
+  // ---------------------------------------------------------------------------
+  //
+  // Allows callers such as the local 3MF converter to receive the
+  // completed project data for generating a copy-ready report.
+  //
+  // Existing MakerWorld conversions remain unaffected because
+  // the callback is only executed when explicitly provided.
+
+  if (typeof opts.onProjectReport === 'function') {
+    try {
+      opts.onProjectReport(project);
+    } catch (reportError) {
+      // Report delivery must never invalidate a successful conversion.
+      console.warn(
+        '[U1 Converter] Project report callback failed:',
+        reportError
+      );
+    }
+  }
+
   return outputBytes;
   } catch (rawError) {
     const failedStage =

@@ -39,6 +39,94 @@
   .save-row { margin-top: 8px; display: flex; align-items: center; gap: 12px; }
   #saveStatus { font-size: 12px; color: #4caf50; }
   .hint { margin-top: 8px; color: #888; font-size: 12px; line-height: 1.5; }
+
+    /* Local 3MF conversion */
+
+  #localConversionSection {
+    margin-top: 16px;
+  }
+
+  .local-3mf-dropzone {
+    margin-top: 14px;
+    padding: 28px 20px;
+    border: 2px dashed #454545;
+    border-radius: 8px;
+    background: #202020;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+
+  .local-3mf-dropzone:hover,
+  .local-3mf-dropzone:focus-visible,
+  .local-3mf-dropzone.is-dragover {
+    border-color: #4a9eff;
+    background: #253044;
+  }
+
+  .local-3mf-dropzone-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #e0e0e0;
+  }
+
+  .local-3mf-dropzone .hint {
+    margin: 12px 0;
+  }
+
+  .local-3mf-status {
+    margin-top: 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #aaa;
+    overflow-wrap: anywhere;
+  }
+
+  .local-3mf-status.is-error {
+    color: #ff7675;
+  }
+
+  .local-3mf-status.is-success {
+    color: #4caf50;
+  }
+
+  /* Animated loading indicator during local conversion */
+
+  .local-3mf-status.is-loading::before {
+    content: "";
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-right: 8px;
+    border: 2px solid #555;
+    border-top-color: #4a9eff;
+    border-radius: 50%;
+    vertical-align: -2px;
+    animation: local3mf-spin .7s linear infinite;
+  }
+
+  @keyframes local3mf-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* Local 3MF report actions */
+
+  .local-3mf-report-actions {
+    margin-top: 10px;
+  }
+
+  #local3mfCopyReportBtn[hidden] {
+    display: none;
+  }
+
+  .local-3mf-dropzone.is-busy {
+    opacity: .6;
+    pointer-events: none;
+    cursor: wait;
+  }
+
   #profilesLoading { color: #888; font-size: 13px; } 
 
   .option-row {
@@ -563,7 +651,84 @@
   <span id="saveStatus"></span>
 </div>
 
+<!-- Local 3MF conversion -->
+<section id="localConversionSection">
+  <h2>Convert Local 3MF</h2>
+
+  <p class="hint">
+    Convert a local MakerWorld or Bambu Studio 3MF project
+    using your saved converter settings.
+  </p>
+
+  <div
+    id="local3mfDropZone"
+    class="local-3mf-dropzone"
+    role="button"
+    tabindex="0"
+    aria-label="Choose a local 3MF file"
+  >
+    <div class="local-3mf-dropzone-title">
+      Drag &amp; drop your 3MF file here
+    </div>
+
+    <p class="hint">or</p>
+
+    <button
+      type="button"
+      class="btn-primary"
+      id="local3mfChooseBtn"
+    >
+      Choose 3MF File
+    </button>
+
+    <input
+      type="file"
+      id="local3mfFileInput"
+      accept=".3mf"
+      hidden
+    >
+  </div>
+
+  <p class="hint">
+    Supports MakerWorld / Bambu Studio 3MF projects.
+    Conversion runs locally in your browser.
+  </p>
+
+  <div
+    id="local3mfStatus"
+    class="local-3mf-status"
+    role="status"
+    aria-live="polite"
+  ></div>
+
+  <div class="local-3mf-report-actions">
+    <button
+      type="button"
+      id="local3mfCopyReportBtn"
+      class="btn-primary"
+      hidden
+    >
+      Copy Report
+    </button>
+  </div>
+</section>
+
+<script src="lib/jszip.min.js"></script>
+
 <script src="u1_custom_printer_profiles.js"></script>
+<script src="u1_filament_merge.js"></script>
+<script src="u1_project_merge.js"></script>
+<script src="u1_profile_resolver.js"></script>
+<script src="u1_compatibility.js"></script>
+<script src="u1_model_parser.js"></script>
+<script src="u1_bambu_parser.js"></script>
+<script src="u1_project_parser.js"></script>
+<script src="u1_project_builder.js"></script>
+<script src="u1_3mf_metadata.js"></script>
+<script src="u1_project_report.js"></script>
+<script src="converter.js"></script>
+<script src="u1_error_report.js"></script>
+
 <script src="options.js"></script>
 </body>
 </html>

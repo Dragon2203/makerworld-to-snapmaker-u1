@@ -1086,3 +1086,609 @@ function logFilamentSlotDifferences(project) {
     console.groupEnd();
   }
 }
+
+// -----------------------------------------------------------------------------
+// Copy-ready project report
+// -----------------------------------------------------------------------------
+
+function buildU1ProjectReportText(project, context = {}) {
+  if (!project) return '';
+
+  const model = project.analysis?.model || {};
+  const features = project.analysis?.features || {};
+  const compatibility = project.compatibility || {};
+  const printerProfile =
+    project.analysis?.customPrinterProfile || {};
+
+  const processPreset =
+    project.analysis?.processPreset || {};
+
+  const processMerge =
+    project.analysis?.processMerge || {};
+
+  const multiPlate =
+    project.analysis?.multiPlatePositioning || null;
+
+  const performance =
+    project.converter?.performance || {};
+
+  const options = project.options || {};
+
+  const targetSlicer =
+    options.orcaCompatibility === true ||
+    printerProfile.compatibilityMode === 'orca'
+      ? 'OrcaSlicer'
+      : 'Snapmaker Orca';
+
+  const lines = [
+    'MakerWorld to Snapmaker U1 — Project Report',
+    '',
+    `Extension version: ${project.converter?.version || 'unknown'}`,
+    `Source: ${context.source || 'unknown'}`,
+    `Filename: ${context.filename || 'unknown'}`,
+    `Target slicer: ${targetSlicer}`,
+    '',
+    '=== Project Summary ===',
+
+    `Files: ${project.stats?.fileCount ?? 'unknown'}`,
+    `Metadata files: ${project.stats?.metadataCount ?? 'unknown'}`,
+    `Model files: ${project.stats?.modelCount ?? 'unknown'}`,
+    `Thumbnail files: ${project.stats?.thumbnailCount ?? 'unknown'}`,
+
+    '',
+    `Objects: ${model.objectCount ?? 'unknown'}`,
+    `Build items: ${model.buildItemCount ?? 'unknown'}`,
+    `Mesh objects: ${model.meshObjectCount ?? 'unknown'}`,
+    `Component objects: ${model.componentObjectCount ?? 'unknown'}`,
+
+    '',
+    `Base material groups: ${model.baseMaterialGroupCount ?? 'unknown'}`,
+    `Base materials: ${model.baseMaterialCount ?? 'unknown'}`,
+    `Color groups: ${model.colorGroupCount ?? 'unknown'}`,
+    `Colors: ${model.colorCount ?? 'unknown'}`,
+
+    '',
+    `Vertices: ${model.totalVertices ?? 'unknown'}`,
+    `Triangles: ${model.totalTriangles ?? 'unknown'}`,
+
+    '',
+    `Supports: ${features.hasSupport === true}`,
+    `Variable layer height: ${features.hasAdaptiveLayer === true}`,
+    `Multi-color: ${features.hasMultiColor === true}`,
+    `Multi-material: ${features.hasMultiMaterial === true}`,
+    '',
+    '=== Converter Settings ===',
+  ];
+
+  const reportOptions =
+    formatConverterOptionsForReport(options);
+
+  for (const [key, value] of Object.entries(reportOptions)) {
+    lines.push(`${key}: ${value}`);
+  }
+
+  lines.push(
+    '',
+    '=== Filaments ===',
+    `Source filaments: ${project.filaments?.source?.length || 0}`,
+    `Final filament slots: ${project.filaments?.mapped?.ids?.length || 0}`,
+    `Filament preset mode: ${options.filamentPresetMode || 'preserve'}`
+  );
+
+  const sourceSettings =
+    project.original?.settings || {};
+
+  const finalSettings =
+    project.u1?.settings || {};
+
+  const sourceFilamentCount =
+    project.filaments?.source?.length || 0;
+
+  const filamentCount = Math.max(
+    typeof TARGET_FILAMENTS === 'number' ? TARGET_FILAMENTS : 0,
+    sourceFilamentCount,
+    project.filaments?.mapped?.ids?.length || 0,
+    sourceSettings.filament_settings_id?.length || 0,
+    finalSettings.filament_settings_id?.length || 0
+  );
+
+  const formatFilamentValue = value => {
+    if (value === undefined || value === null || value === '') {
+      return 'not specified';
+    }
+
+    return String(value);
+  };
+
+  for (let i = 0; i < filamentCount; i++) {
+    const isAdditionalSlot =
+      i >= sourceFilamentCount;
+
+    const presetAnalysis =
+      project.analysis?.filamentPreset?.slots?.find(
+        entry => entry.slot === i + 1
+      );
+
+    lines.push(
+      '',
+      `Filament slot ${i + 1}:`,
+      `  Slot type: ${isAdditionalSlot ? 'Additional target slot' : 'Source filament'}`,
+      `  Preset action: ${presetAnalysis?.action || 'not recorded'}`,
+
+      `  Source preset: ${
+        isAdditionalSlot
+          ? 'not applicable'
+          : formatFilamentValue(sourceSettings.filament_settings_id?.[i])
+      }`,
+
+      `  Final preset: ${formatFilamentValue(finalSettings.filament_settings_id?.[i])}`,
+
+      `  Source vendor: ${
+        isAdditionalSlot
+          ? 'not applicable'
+          : formatFilamentValue(sourceSettings.filament_vendor?.[i])
+      }`,
+
+      `  Final vendor: ${formatFilamentValue(finalSettings.filament_vendor?.[i])}`,
+
+      `  Source type: ${
+        isAdditionalSlot
+          ? 'not applicable'
+          : formatFilamentValue(sourceSettings.filament_type?.[i])
+      }`,
+
+      `  Final type: ${formatFilamentValue(finalSettings.filament_type?.[i])}`,
+
+      `  Source color: ${
+        isAdditionalSlot
+          ? 'not applicable'
+          : formatFilamentValue(sourceSettings.filament_colour?.[i])
+      }`,
+
+      `  Final color: ${formatFilamentValue(finalSettings.filament_colour?.[i])}`
+    );
+  }
+
+  // Printer profile details
+  const targetNozzle =
+    project.analysis?.targetNozzle || {};
+
+  const requestedPrinterProfile =
+    printerProfile.requested ||
+    (typeof U1_CUSTOM_PRINTER_STANDARD_ID !== 'undefined'
+      ? U1_CUSTOM_PRINTER_STANDARD_ID
+      : 'standard');
+
+  const standardPrinterProfileSelected =
+    typeof U1_CUSTOM_PRINTER_STANDARD_ID !== 'undefined' &&
+    requestedPrinterProfile === U1_CUSTOM_PRINTER_STANDARD_ID;
+
+  const printerProfileMode =
+    standardPrinterProfileSelected
+      ? 'standard'
+      : 'custom';
+
+  lines.push(
+    '',
+    '=== Printer Profile ===',
+
+    `Mode: ${printerProfileMode}`,
+    `Requested: ${requestedPrinterProfile}`,
+    `Selected: ${printerProfile.selected || finalSettings.printer_settings_id || 'unknown'}`,
+    `Inherited from: ${printerProfile.inheritedFrom || 'none'}`,
+
+    '',
+    `Target nozzle: ${
+      targetNozzle.nozzleDiameter != null
+        ? `${targetNozzle.nozzleDiameter} mm`
+        : 'unknown'
+    }`,
+    `Target nozzle source: ${targetNozzle.source || 'unknown'}`,
+    `Process profile asset: ${targetNozzle.processProfileId || 'unknown'}`,
+
+    '',
+    `Machine index: ${printerProfile.machineIndex ?? 'unknown'}`,
+    `Custom profile applied: ${
+      !standardPrinterProfileSelected &&
+      (printerProfile.overrideCount || 0) > 0
+    }`,
+    `Custom overrides: ${printerProfile.overrideCount || 0}`,
+    `Missing profile: ${printerProfile.missing === true}`
+  );
+
+  // Custom printer profile override diagnostics
+  const appliedPrinterOverrides =
+    printerProfile.applied || [];
+
+  const skippedPrinterOverrides =
+    printerProfile.skipped || [];
+
+  lines.push(
+    '',
+    `Applied overrides: ${appliedPrinterOverrides.length}`,
+    `Skipped overrides: ${skippedPrinterOverrides.length}`
+  );
+
+  if (appliedPrinterOverrides.length) {
+    lines.push(
+      '',
+      'Applied override details:'
+    );
+
+    for (const entry of appliedPrinterOverrides) {
+      if (typeof entry === 'string') {
+        lines.push(`  - ${entry}`);
+        continue;
+      }
+
+      lines.push(
+        `  - ${entry.key || 'unknown'} (${entry.valueType || 'unknown'})`
+      );
+    }
+  }
+
+  if (skippedPrinterOverrides.length) {
+    lines.push(
+      '',
+      'Skipped override details:'
+    );
+
+    for (const entry of skippedPrinterOverrides) {
+      if (typeof entry === 'string') {
+        lines.push(`  - ${entry}`);
+        continue;
+      }
+
+      lines.push(
+        `  - ${entry.key || 'unknown'}`,
+        `    Reason: ${entry.reason || 'not specified'}`
+      );
+
+      if (entry.valueType) {
+        lines.push(
+          `    Value type: ${entry.valueType}`
+        );
+      }
+    }
+  }
+
+  lines.push(
+    '',
+    '=== Print Profile ==='
+  );
+
+  const printSummary =
+    formatPrintProfileSummaryForReport(processPreset);
+
+  for (const [key, value] of Object.entries(printSummary)) {
+    lines.push(`${key}: ${value}`);
+  }
+
+  // Process settings protected by a forced print profile.
+  const lockedByForcedProfile =
+    (processMerge.skipped || []).filter(
+      entry => entry.reason === 'locked-by-forced-print-profile'
+    );
+
+  const otherSkippedSettings =
+    (processMerge.skipped || []).filter(
+      entry => entry.reason !== 'locked-by-forced-print-profile'
+    );
+
+  lines.push(
+    '',
+    '=== Process Merge ===',
+    `Mode: ${processMerge.mode || 'unknown'}`,
+    `Strict: ${processMerge.strict === true}`,
+    `Candidates: ${processMerge.candidates?.length || 0}`,
+    `Merged settings: ${processMerge.merged?.length || 0}`,
+    `Locked by forced profile: ${lockedByForcedProfile.length}`,
+    `Blocked settings: ${processMerge.blocked?.length || 0}`,
+    `Skipped settings: ${otherSkippedSettings.length}`
+  );
+
+  // Format process merge entries as readable text instead of JSON.
+  const appendProcessMergeDetails = (title, entries) => {
+    if (!entries?.length) return;
+
+    lines.push('', title);
+
+    for (const entry of entries) {
+      lines.push(
+        '',
+        `  ${entry.key || 'Unknown setting'}:`,
+        `    Source value: ${entry.sourceValue ?? 'not specified'}`,
+        `    Final value: ${entry.finalValue ?? 'not specified'}`,
+        `    Category: ${entry.category || 'unknown'}`,
+        `    Reason: ${entry.reason || 'not specified'}`
+      );
+
+      if (entry.blocked !== undefined) {
+        lines.push(
+          `    Blocked: ${entry.blocked}`
+        );
+      }
+
+      if (entry.existsInU1Template !== undefined) {
+        lines.push(
+          `    Exists in U1 template: ${entry.existsInU1Template}`
+        );
+      }
+
+      if (entry.portableByHeuristic !== undefined) {
+        lines.push(
+          `    Portable by heuristic: ${entry.portableByHeuristic}`
+        );
+      }
+    }
+  };
+
+  appendProcessMergeDetails(
+    'Merged setting details:',
+    processMerge.merged
+  );
+
+  appendProcessMergeDetails(
+    'Blocked setting details:',
+    processMerge.blocked
+  );
+
+  appendProcessMergeDetails(
+    'Locked by forced print profile:',
+    lockedByForcedProfile
+  );
+
+  appendProcessMergeDetails(
+    'Other skipped setting details:',
+    otherSkippedSettings
+  );
+
+  lines.push(
+    '',
+    '=== Multi-Plate Positioning ===',
+
+    `Available: ${multiPlate !== null}`,
+    `Enabled: ${multiPlate?.enabled ?? 'unknown'}`,
+    `Detected: ${multiPlate?.detected ?? 'unknown'}`,
+    `Applied: ${multiPlate?.applied ?? 'unknown'}`,
+    `Reason: ${multiPlate?.reason || 'none'}`,
+
+    '',
+    `Plates: ${multiPlate?.plateCount ?? 'unknown'}`,
+    `Adjusted plates: ${multiPlate?.adjustedPlateCount ?? 0}`,
+    `Adjusted instances: ${multiPlate?.adjustedInstanceCount ?? 0}`,
+    `Unresolved instances: ${multiPlate?.unresolvedInstanceCount ?? 0}`,
+    `Skipped plates: ${multiPlate?.skippedPlateCount ?? 0}`,
+    `Skipped instances: ${multiPlate?.skippedInstanceCount ?? 0}`
+  );
+
+  // Source printer and build plate
+  if (multiPlate?.source) {
+    lines.push(
+      '',
+      'Source printer:',
+      `  Model: ${multiPlate.source.printerModel || 'unknown'}`,
+      `  Bed size: ${multiPlate.source.width ?? 'unknown'} × ${multiPlate.source.height ?? 'unknown'} mm`,
+      `  Grid step: ${multiPlate.source.gridStepX ?? 'unknown'} × ${multiPlate.source.gridStepY ?? 'unknown'} mm`
+    );
+  }
+
+  // Target printer and build plate
+  if (multiPlate?.target) {
+    lines.push(
+      '',
+      'Target printer:',
+      `  Model: ${multiPlate.target.printerModel || 'unknown'}`,
+      `  Bed size: ${multiPlate.target.width ?? 'unknown'} × ${multiPlate.target.height ?? 'unknown'} mm`,
+      `  Grid step: ${multiPlate.target.gridStepX ?? 'unknown'} × ${multiPlate.target.gridStepY ?? 'unknown'} mm`
+    );
+  }
+
+  // Grid calculations
+  if (multiPlate) {
+    lines.push(
+      '',
+      `Grid factor: ${multiPlate.gridFactor ?? 'unknown'}`
+    );
+  }
+
+  if (multiPlate?.centerOffset) {
+    lines.push(
+      '',
+      'Center offset:',
+      `  X: ${multiPlate.centerOffset.x ?? 0} mm`,
+      `  Y: ${multiPlate.centerOffset.y ?? 0} mm`
+    );
+  }
+
+  if (multiPlate?.gridDifference) {
+    lines.push(
+      '',
+      'Grid difference:',
+      `  X: ${multiPlate.gridDifference.x ?? 0} mm`,
+      `  Y: ${multiPlate.gridDifference.y ?? 0} mm`
+    );
+  }
+
+  // Detected plate grid
+  if (multiPlate?.grid) {
+    const grid = multiPlate.grid;
+
+    lines.push(
+      '',
+      'Detected grid:',
+      `  Columns: ${
+        grid.minColumn != null && grid.maxColumn != null
+          ? `${grid.minColumn} → ${grid.maxColumn}`
+          : 'unknown'
+      }`,
+      `  Rows: ${
+        grid.minRow != null && grid.maxRow != null
+          ? `${grid.minRow} → ${grid.maxRow}`
+          : 'unknown'
+      }`,
+      `  Cells: ${grid.detectedCells ?? 0}`
+    );
+  }
+
+  // Maximum movement applied to instances
+  if (multiPlate?.movement) {
+    lines.push(
+      '',
+      'Maximum movement:',
+      `  X: ${multiPlate.movement.maxAbsDeltaX ?? 0} mm`,
+      `  Y: ${multiPlate.movement.maxAbsDeltaY ?? 0} mm`
+    );
+  }
+
+  // Processing duration
+  if (Number.isFinite(multiPlate?.durationMs)) {
+    lines.push(
+      '',
+      `Processing duration: ${multiPlate.durationMs.toFixed(2)} ms`
+    );
+  }
+
+  // Plates that could not be processed correctly
+  if (multiPlate?.problemPlateIds?.length) {
+    lines.push(
+      '',
+      'Problem plates:',
+      ...multiPlate.problemPlateIds.map(
+        plateId => `  - ${plateId}`
+      )
+    );
+  }
+
+  // Multi-plate-specific warnings
+  if (multiPlate?.warnings?.length) {
+    lines.push(
+      '',
+      'Multi-plate warnings:',
+      ...multiPlate.warnings.map(
+        warning =>
+          `  - ${
+            typeof warning === 'string'
+              ? warning
+              : JSON.stringify(warning)
+          }`
+      )
+    );
+  }
+
+  lines.push(
+    '',
+    '=== Automatic Project Adjustments ===',
+    `Applied actions: ${compatibility.actions?.length || 0}`,
+    `Warnings: ${compatibility.warnings?.length || 0}`
+  );
+
+  // Format automatic adjustments and warnings as readable text.
+  const appendCompatibilityDetails = (title, entries) => {
+    if (!entries?.length) return;
+
+    lines.push('', title);
+
+    for (const entry of entries) {
+      if (entry === null || typeof entry !== 'object') {
+        lines.push('', `  - ${String(entry)}`);
+        continue;
+      }
+
+      lines.push(
+        '',
+        `  ${entry.id || entry.code || 'Entry'}:`
+      );
+
+      for (const [key, value] of Object.entries(entry)) {
+        if (key === 'id' || key === 'code') continue;
+
+        const label = key
+          .replace(/([a-z])([A-Z])/g, '$1 $2')
+          .replace(/_/g, ' ')
+          .replace(/^./, char => char.toUpperCase());
+
+        const formattedValue =
+          value !== null && typeof value === 'object'
+            ? JSON.stringify(value)
+            : String(value);
+
+        lines.push(`    ${label}: ${formattedValue}`);
+      }
+    }
+  };
+
+  appendCompatibilityDetails(
+    'Applied action details:',
+    compatibility.actions
+  );
+
+  appendCompatibilityDetails(
+    'Warning details:',
+    compatibility.warnings
+  );
+
+  // Human-readable file sizes.
+  const formatReportBytes = value => {
+    if (!Number.isFinite(value)) return 'unknown';
+
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let size = value;
+    let unitIndex = 0;
+
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+
+    return `${size.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
+  };
+
+  lines.push(
+    '',
+    '=== Performance ===',
+
+    `Conversion time: ${project.converter?.conversionMs ?? 'unknown'} ms`,
+
+    '',
+    'ZIP statistics:',
+    `  Input size: ${formatReportBytes(performance.inputBytes)} (${performance.inputBytes ?? 'unknown'} bytes)`,
+    `  Output size: ${formatReportBytes(performance.outputBytes)} (${performance.outputBytes ?? 'unknown'} bytes)`,
+
+    '',
+    `  ZIP entries: ${performance.zipEntryCount ?? 'unknown'}`,
+    `  Copied files: ${performance.copiedFileCount ?? 'unknown'}`,
+    `  Rewritten files: ${performance.rewrittenFileCount ?? 'unknown'}`,
+    `  Directories: ${performance.directoryCount ?? 'unknown'}`,
+    `  Skipped unsafe files: ${performance.skippedUnsafeFileCount ?? 'unknown'}`,
+    `  Compression: ${performance.compression || 'unknown'}`
+  );
+
+  if (performance.timings) {
+    const stageNames = {
+      projectParseMs: 'Project parse',
+      projectBuildMs: 'Build U1 project',
+      metadataRewriteMs: 'Metadata rewrite',
+      zipEntryCopyMs: 'Copy ZIP entries',
+      zipGenerateMs: 'Generate output ZIP',
+      totalMs: 'Total'
+    };
+
+    lines.push('', 'Stage timings:');
+
+    for (const [stage, duration] of Object.entries(performance.timings)) {
+      const stageName = stageNames[stage] || stage;
+
+      const formattedDuration =
+        Number.isFinite(duration)
+          ? duration >= 1000
+            ? `${(duration / 1000).toFixed(2)} s`
+            : `${duration.toFixed(2)} ms`
+          : 'unknown';
+
+      lines.push(`  ${stageName}: ${formattedDuration}`);
+    }
+  }
+
+  return lines.join('\n');
+}

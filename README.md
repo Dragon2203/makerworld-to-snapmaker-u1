@@ -2,12 +2,17 @@
 
 # MakerWorld to Snapmaker U1
 
-Convert MakerWorld print profiles into native Snapmaker U1 projects with a single click.
+Convert MakerWorld and Bambu Studio 3MF projects into native Snapmaker U1 projects — directly from MakerWorld or from local files.
 
-MakerWorld to Snapmaker U1 is a browser extension for Chrome, Chromium-based browsers and Firefox. It integrates directly into MakerWorld and adds a dedicated **"Convert to Snapmaker U1"** button.
+MakerWorld to Snapmaker U1 is a browser extension for Chrome, Chromium-based browsers and Firefox. It offers two ways to convert projects:
+
+- **Direct MakerWorld conversion:** Convert print profiles directly on MakerWorld with a single click on a dedicated **"Convert to Snapmaker U1"** button.
+- **Local 3MF conversion:** Convert existing MakerWorld or Bambu Studio 3MF files using drag & drop or the built-in file picker.
 
 
 Instead of downloading a project, uploading it to an external converter and adjusting settings manually, simply click **Convert to Snapmaker U1**, open the generated project in **Snapmaker Orca** and start printing.
+
+Additionally, you can now convert previously downloaded MakerWorld or Bambu Studio 3MF projects directly from the extension settings. Simply select a local `.3mf` file or drag & drop it into the converter — no need to visit MakerWorld again.
 
 The converter preserves the creator's original print settings whenever possible and automatically applies only the changes required for Snapmaker Orca compatibility.
 
@@ -20,7 +25,7 @@ All conversion happens locally inside your browser.
 
 ---
 
-## Workflow
+## Direct MakerWorld Conversion
 
 1. Open a MakerWorld model.
 2. Select the desired print profile.
@@ -43,6 +48,38 @@ Converting a project is as simple as clicking **Convert to Snapmaker U1**. The c
 
 ---
 
+## Local 3MF Conversion
+
+![Local 3MF Conversion](screenshots/local-conversion.png)
+
+In addition to direct MakerWorld integration, the extension can convert existing local 3MF projects without visiting MakerWorld.
+
+This is useful if you have already downloaded a project or have a compatible 3MF file exported from Bambu Studio.
+
+### How to convert a local 3MF file
+
+1. Click the **MakerWorld to Snapmaker U1** extension icon in your browser toolbar to open the converter settings.
+2. Scroll down to the **Convert Local 3MF** section.
+3. Drag & drop a `.3mf` file into the conversion area or click **Choose 3MF File**.
+4. The extension automatically converts the project using your saved converter settings and selected printer profile.
+5. The converted project is downloaded automatically with the `-U1.3mf` suffix.
+6. Open the converted file in Snapmaker Orca or OrcaSlicer, review the settings and start printing.
+
+### Features
+
+- Supports compatible MakerWorld and Bambu Studio 3MF projects.
+- Uses the same conversion engine as the direct MakerWorld integration.
+- Applies your saved converter settings, including custom printer profiles.
+- Supports drag & drop and manual file selection.
+- Automatically downloads the converted project.
+- Provides a detailed **Project Report** after successful conversion.
+- Provides a detailed **Error Report** if conversion fails.
+- All processing happens locally inside your browser. No files are uploaded to external servers.
+
+> **Note:** Local conversion is intended for MakerWorld and Bambu Studio 3MF projects. Generic 3MF files from other applications are not guaranteed to be compatible.
+
+---
+
 ## Why this extension?
 
 MakerWorld print profiles are currently distributed as Bambu Studio project files. Snapmaker Orca can open these projects, but they often require manual adjustments before they are ready to print.
@@ -60,6 +97,8 @@ The goal is simple:
 ## Why use this extension?
 
 ✔ One-click conversion directly from MakerWorld
+
+✔ Convert existing local MakerWorld and Bambu Studio 3MF files
 
 ✔ Preserves the creator's original print settings whenever possible
 
@@ -262,6 +301,18 @@ For development or temporary testing, the Firefox package can still be downloade
 ---
 
 ## FAQ
+
+### Can I convert a 3MF file that I already downloaded?
+
+Yes.
+
+Open the extension settings by clicking the browser toolbar icon and scroll down to **Convert Local 3MF**.
+
+You can drag & drop a compatible MakerWorld or Bambu Studio `.3mf` project or select it manually.
+
+The extension uses your saved conversion settings and automatically downloads the converted project.
+
+---
 
 ### Are my files uploaded?
 

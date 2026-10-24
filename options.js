@@ -31,6 +31,779 @@ let orcaCustomPrinterProfiles = {};
 let pendingPrinterProfileFiles = [];
 let availableProcessProfiles = [];
 
+// ── Local 3MF conversion ──────────────────────────────────────────────────────
+
+const local3mfDropZone =
+  document.getElementById('local3mfDropZone');
+
+const local3mfChooseBtn =
+  document.getElementById('local3mfChooseBtn');
+
+const local3mfFileInput =
+  document.getElementById('local3mfFileInput');
+
+const local3mfStatus =
+  document.getElementById('local3mfStatus');
+
+const local3mfCopyReportBtn =
+  document.getElementById('local3mfCopyReportBtn');
+
+let local3mfBusy = false;
+
+// Currently available report for the last local conversion.
+let local3mfReportText = '';
+let local3mfReportType = null;
+
+function setLocal3mfStatus(message, state = '') {
+  if (!local3mfStatus) return;
+
+  local3mfStatus.textContent = message;
+
+  local3mfStatus.classList.toggle(
+    'is-error',
+    state === 'error'
+  );
+
+  local3mfStatus.classList.toggle(
+    'is-success',
+    state === 'success'
+  );
+
+  local3mfStatus.classList.toggle(
+    'is-loading',
+    state === 'loading'
+  );
+}
+
+// ── Local 3MF report UI ───────────────────────────────────────────────────────
+
+function setLocal3mfReport(type = null, text = '') {
+  local3mfReportType = type;
+  local3mfReportText = String(text || '');
+
+  if (!local3mfCopyReportBtn) return;
+
+  const hasReport =
+    (type === 'project' || type === 'error') &&
+    local3mfReportText.length > 0;
+
+  local3mfCopyReportBtn.hidden = !hasReport;
+
+  if (!hasReport) {
+    local3mfCopyReportBtn.textContent = 'Copy Report';
+    return;
+  }
+
+  local3mfCopyReportBtn.textContent =
+    type === 'project'
+      ? 'Copy Project Report'
+      : 'Copy Error Report';
+}
+
+function setLocal3mfBusy(busy) {
+  local3mfBusy = busy;
+
+  local3mfDropZone?.classList.toggle(
+    'is-busy',
+    busy
+  );
+
+  if (local3mfChooseBtn) {
+    local3mfChooseBtn.disabled = busy;
+  }
+
+  if (local3mfFileInput) {
+    local3mfFileInput.disabled = busy;
+  }
+}
+
+async function handleLocal3mfFile(file) {
+  if (local3mfBusy || !file) return;
+
+  // Clear the previous report for every new file,
+  // including invalid or empty files.
+  setLocal3mfReport();
+
+  if (!/\.3mf$/i.test(file.name)) {
+    setLocal3mfStatus(
+      'Please select a valid .3mf file.',
+      'error'
+    );
+    return;
+  }
+
+  if (file.size === 0) {
+    setLocal3mfStatus(
+      'The selected 3MF file is empty.',
+      'error'
+    );
+    return;
+  }
+
+  setLocal3mfBusy(true);
+
+  // Track the complete local 3MF workflow.
+  // The converter will reuse this diagnostics instance.
+  const localDiagnostics =
+    createU1ConversionDiagnostics({
+      source: 'Local 3MF file',
+      filename: file.name,
+      inputBytes: file.size,
+      converterVersion: getConverterVersion(),
+      browser:
+        typeof browser !== 'undefined' &&
+        typeof browser.runtime?.getBrowserInfo === 'function'
+          ? 'Firefox'
+          : 'Chrome / Chromium'
+    });
+
+  let local3mfStage = 'read';
+
+  try {
+    // Track local file reading.
+    localDiagnostics.startStage(
+      'read-local-3mf-file',
+      'Read local 3MF file',
+      {
+        filename: file.name,
+        fileSize: file.size
+      }
+    );
+
+    setLocal3mfStatus(
+      'Reading ' + file.name + '...'
+    );
+
+    const inputBuffer =
+      await file.arrayBuffer();
+
+    if (inputBuffer.byteLength === 0) {
+      throw new Error(
+        'The selected file contains no data.'
+      );
+    }
+
+    localDiagnostics.setMetadata({
+      inputBytes: inputBuffer.byteLength
+    });
+
+    localDiagnostics.completeStage(
+      'read-local-3mf-file'
+    );
+
+    console.info(
+      '[U1 Local Conversion] File loaded:',
+      {
+        filename: file.name,
+        bytes: inputBuffer.byteLength
+      }
+    );
+
+    // Load saved converter settings and custom printer profile.
+
+    local3mfStage = 'settings';
+
+    localDiagnostics.startStage(
+      U1_DIAGNOSTIC_STAGES.READ_SETTINGS,
+      getU1DiagnosticStageLabel(
+        U1_DIAGNOSTIC_STAGES.READ_SETTINGS
+      )
+    );
+
+    setLocal3mfStatus(
+      'Loading converter settings...'
+    );
+
+    const converterOptions =
+      await getLocal3mfConverterOptions();
+
+    localDiagnostics.setMetadata({
+      targetSlicer:
+        converterOptions.orcaCompatibility === true
+          ? 'OrcaSlicer'
+          : 'Snapmaker Orca',
+
+      selectedCustomPrinterProfileId:
+        converterOptions.selectedCustomPrinterProfileId ||
+        U1_CUSTOM_PRINTER_STANDARD_ID,
+
+      customPrinterProfileMissing:
+        converterOptions.customPrinterProfileMissing === true
+    });
+
+    localDiagnostics.completeStage(
+      U1_DIAGNOSTIC_STAGES.READ_SETTINGS
+    );
+
+    console.info(
+      '[U1 Local Conversion] Converter settings loaded:',
+      {
+        printProfileMode:
+          converterOptions.printProfileMode,
+
+        forcedProfileId:
+          converterOptions.forcedProfileId,
+
+        filamentPresetMode:
+          converterOptions.filamentPresetMode,
+
+        orcaCompatibility:
+          converterOptions.orcaCompatibility,
+
+        selectedCustomPrinterProfileId:
+          converterOptions.selectedCustomPrinterProfileId,
+
+        customPrinterProfileLoaded:
+          Boolean(converterOptions.customPrinterProfile),
+
+        customPrinterProfileMissing:
+          converterOptions.customPrinterProfileMissing
+      }
+    );
+
+    // Convert the local 3MF using the existing engine.
+
+    local3mfStage = 'convert';
+
+    setLocal3mfStatus(
+      'Converting ' + file.name + '...',
+      'loading'
+    );
+
+    const conversionStartedAt =
+      performance.now();
+
+    let localProjectReportText = '';
+
+    const converted =
+      await convertToU1(
+        new Uint8Array(inputBuffer),
+        {
+          ...converterOptions,
+
+          // Share diagnostics with the local conversion workflow.
+          u1Diagnostics: localDiagnostics,
+
+          onProjectReport: project => {
+            localProjectReportText =
+              buildU1ProjectReportText(
+                project,
+                {
+                  source: 'Local 3MF file',
+                  filename: file.name
+                }
+              );
+          }
+        }
+      );
+
+    const conversionDuration =
+      performance.now() - conversionStartedAt;
+
+    if (
+      !(converted instanceof Uint8Array) ||
+      converted.byteLength === 0
+    ) {
+      throw new Error(
+        'Conversion did not return valid output data.'
+      );
+    }
+
+    console.info(
+      '[U1 Local Conversion] Conversion completed:',
+      {
+        filename: file.name,
+        inputBytes: inputBuffer.byteLength,
+        outputBytes: converted.byteLength,
+        durationMs: Math.round(conversionDuration)
+      }
+    );
+
+    // Start the converted file download automatically.
+
+    local3mfStage = 'download';
+
+    localDiagnostics.startStage(
+      U1_DIAGNOSTIC_STAGES.START_OUTPUT_DOWNLOAD,
+      getU1DiagnosticStageLabel(
+        U1_DIAGNOSTIC_STAGES.START_OUTPUT_DOWNLOAD
+      ),
+      {
+        filename:
+          getLocal3mfOutputFilename(file.name),
+
+        outputBytes:
+          converted.byteLength
+      }
+    );
+
+    setLocal3mfStatus(
+      'Starting download...',
+      'loading'
+    );
+
+    const downloadResult =
+      await downloadLocal3mf(
+        converted,
+        file.name,
+        converterOptions
+      );
+
+    localDiagnostics.setMetadata({
+      outputFilename:
+        downloadResult.filename,
+
+      outputBytes:
+        converted.byteLength,
+
+      downloadId:
+        downloadResult.downloadId
+    });
+
+    localDiagnostics.completeStage(
+      U1_DIAGNOSTIC_STAGES.START_OUTPUT_DOWNLOAD
+    );
+
+    // The local conversion workflow is now complete.
+    localDiagnostics.startStage(
+      U1_DIAGNOSTIC_STAGES.FINISHED,
+      getU1DiagnosticStageLabel(
+        U1_DIAGNOSTIC_STAGES.FINISHED
+      )
+    );
+
+    localDiagnostics.completeStage(
+      U1_DIAGNOSTIC_STAGES.FINISHED
+    );
+
+    localDiagnostics.finish();
+
+    console.info(
+      '[U1 Local Conversion] Download started:',
+      {
+        filename: downloadResult.filename,
+        downloadId: downloadResult.downloadId
+      }
+    );
+
+    setLocal3mfStatus(
+      'Conversion completed successfully: ' +
+      downloadResult.filename +
+      ' (' +
+      (conversionDuration / 1000).toFixed(2) +
+      ' s). Download started.',
+      'success'
+    );
+
+    // Make the project report available only after
+    // conversion and download initiation succeeded.
+    if (localProjectReportText) {
+      setLocal3mfReport(
+        'project',
+        localProjectReportText
+      );
+    }
+
+  } catch (error) {
+    // Preserve detailed errors from the conversion engine.
+    // Only create a new error for failures outside convertToU1().
+    const isConverterError =
+      isU1ConversionError(error);
+
+    let reportError = error;
+
+    if (!isConverterError) {
+      let errorCode = U1_ERROR_CODES.UNKNOWN;
+      let errorStage = localDiagnostics.currentStage;
+
+      let userMessage =
+        'The local 3MF conversion failed.';
+
+      let userAction =
+        'Try converting the file again.';
+
+      if (local3mfStage === 'read') {
+        errorCode = U1_ERROR_CODES.INPUT_INVALID;
+
+        userMessage =
+          'The selected local 3MF file could not be read.';
+
+        userAction =
+          'Check the file and try selecting it again.';
+      } else if (local3mfStage === 'settings') {
+        errorCode =
+          U1_ERROR_CODES.STORAGE_UNAVAILABLE;
+
+        errorStage =
+          U1_DIAGNOSTIC_STAGES.READ_SETTINGS;
+
+        userMessage =
+          'The extension settings could not be loaded.';
+
+        userAction =
+          'Reload the extension settings page and try again.';
+      } else if (local3mfStage === 'convert') {
+        errorCode =
+          U1_ERROR_CODES.PROJECT_BUILD_FAILED;
+
+        userMessage =
+          'The local 3MF conversion could not be completed.';
+
+        userAction =
+          'Copy the error report and include it when reporting the problem.';
+      } else if (local3mfStage === 'download') {
+        errorCode =
+          U1_ERROR_CODES.OUTPUT_DOWNLOAD_FAILED;
+
+        errorStage =
+          U1_DIAGNOSTIC_STAGES.START_OUTPUT_DOWNLOAD;
+
+        userMessage =
+          'The converted file was created, but its download could not be started.';
+
+        userAction =
+          'Check your browser downloads and try again.';
+      }
+
+      reportError = prepareU1ErrorForReport(
+        error,
+        {
+          diagnostics: localDiagnostics,
+          code: errorCode,
+          stage: errorStage,
+          userMessage,
+          userAction,
+          context: {
+            source: 'Local 3MF file',
+            filename: file.name
+          }
+        }
+      );
+    }
+
+    // The converter already attaches its own diagnostics
+    // to U1ConversionError instances.
+    if (isConverterError && !reportError.diagnostics) {
+      reportError.diagnostics =
+        localDiagnostics.snapshot();
+    }
+
+    console.error(
+      '[U1 Local Conversion] Failed:',
+      {
+        stage: local3mfStage,
+        filename: file.name,
+        error: reportError
+      }
+    );
+
+    // Build the error report using the existing diagnostics.
+    try {
+      // Use a report-only copy so the original conversion error
+      // and its diagnostics remain unchanged.
+      const localReportError = Object.assign(
+        Object.create(Object.getPrototypeOf(reportError)),
+        reportError
+      );
+
+      const localReportDiagnostics = structuredClone(
+        reportError.diagnostics ||
+        localDiagnostics.snapshot()
+      );
+
+      // Adjust user-facing messages for local 3MF files only.
+      // Preserve error codes, technical messages and diagnostics.
+      const localUserMessage =
+        'The selected local 3MF file could not be converted.';
+
+      const localUserAction =
+        'Check the local 3MF file and try converting it again.';
+
+      const adaptLocal3mfMessage = (message, fallback) => {
+        if (typeof message !== 'string') {
+          return message;
+        }
+
+        if (/makerworld/i.test(message)) {
+          return fallback;
+        }
+
+        return message
+          .replace(
+            /\bthe downloaded 3MF\b/gi,
+            match =>
+              match[0] === 'T'
+                ? 'The selected local 3MF'
+                : 'the selected local 3MF'
+          )
+          .replace(
+            /\bthe downloaded file\b/gi,
+            match =>
+              match[0] === 'T'
+                ? 'The selected local file'
+                : 'the selected local file'
+          )
+          .replace(
+            /\bdownloading and converting the model again\b/gi,
+            match =>
+              match[0] === 'D'
+                ? 'Converting the local 3MF file again'
+                : 'converting the local 3MF file again'
+          );
+      };
+
+      localReportError.userMessage =
+        adaptLocal3mfMessage(
+          localReportError.userMessage,
+          localUserMessage
+        );
+
+      localReportError.userAction =
+        adaptLocal3mfMessage(
+          localReportError.userAction,
+          localUserAction
+        );
+
+      // Keep the diagnostics summary consistent with the
+      // report-only error object.
+      if (localReportDiagnostics.error) {
+        localReportDiagnostics.error.userMessage =
+          adaptLocal3mfMessage(
+            localReportDiagnostics.error.userMessage,
+            localUserMessage
+          );
+
+        localReportDiagnostics.error.userAction =
+          adaptLocal3mfMessage(
+            localReportDiagnostics.error.userAction,
+            localUserAction
+          );
+      }
+
+      localReportError.diagnostics =
+        localReportDiagnostics;
+
+      const errorReportText =
+        buildU1ErrorReportText(
+          localReportError,
+          localReportDiagnostics
+        );
+
+      if (errorReportText) {
+        setLocal3mfReport(
+          'error',
+          errorReportText
+        );
+      }
+    } catch (reportBuildError) {
+      console.error(
+        '[U1 Local Conversion] Failed to build error report:',
+        reportBuildError
+      );
+
+      // Keep the original conversion error visible.
+      setLocal3mfReport();
+    }
+
+    const stageLabels = {
+      read: 'File processing failed',
+      settings: 'Loading settings failed',
+      convert: 'Conversion failed',
+      download: 'Download failed'
+    };
+
+    const stageLabel =
+      stageLabels[local3mfStage] ||
+      'Local 3MF processing failed';
+
+    setLocal3mfStatus(
+      stageLabel + ': ' +
+      (error?.message || String(error)),
+      'error'
+    );
+
+  } finally {
+    setLocal3mfBusy(false);
+  }
+}
+
+// ── Copy local 3MF report ─────────────────────────────────────────────────────
+
+local3mfCopyReportBtn?.addEventListener(
+  'click',
+  async () => {
+    if (!local3mfReportText) return;
+
+    const originalLabel =
+      local3mfCopyReportBtn.textContent;
+
+    try {
+      await navigator.clipboard.writeText(
+        local3mfReportText
+      );
+
+      local3mfCopyReportBtn.textContent =
+        'Copied!';
+
+      setTimeout(() => {
+        if (
+          local3mfCopyReportBtn.textContent === 'Copied!'
+        ) {
+          local3mfCopyReportBtn.textContent =
+            originalLabel;
+        }
+      }, 2000);
+
+    } catch (error) {
+      console.error(
+        '[U1 Local Conversion] Could not copy report:',
+        error
+      );
+
+      local3mfCopyReportBtn.textContent =
+        'Copy failed';
+
+      setTimeout(() => {
+        if (
+          local3mfCopyReportBtn.textContent === 'Copy failed'
+        ) {
+          local3mfCopyReportBtn.textContent =
+            originalLabel;
+        }
+      }, 2000);
+    }
+  }
+);
+
+// Open native file picker.
+
+local3mfChooseBtn?.addEventListener(
+  'click',
+  event => {
+    event.stopPropagation();
+
+    if (!local3mfBusy) {
+      local3mfFileInput?.click();
+    }
+  }
+);
+
+// Clicking the drop zone also opens the picker.
+
+local3mfDropZone?.addEventListener(
+  'click',
+  event => {
+    if (
+      local3mfBusy ||
+      event.target === local3mfChooseBtn
+    ) {
+      return;
+    }
+
+    local3mfFileInput?.click();
+  }
+);
+
+// Keyboard accessibility.
+
+local3mfDropZone?.addEventListener(
+  'keydown',
+  event => {
+    if (
+      event.target !== local3mfDropZone ||
+      local3mfBusy
+    ) {
+      return;
+    }
+
+    if (
+      event.key === 'Enter' ||
+      event.key === ' '
+    ) {
+      event.preventDefault();
+      local3mfFileInput?.click();
+    }
+  }
+);
+
+// File selected through the picker.
+
+local3mfFileInput?.addEventListener(
+  'change',
+  async event => {
+    const file = event.target.files?.[0];
+
+    // Allow selecting the same file again.
+    event.target.value = '';
+
+    await handleLocal3mfFile(file);
+  }
+);
+
+// Drag & drop support.
+
+local3mfDropZone?.addEventListener(
+  'dragover',
+  event => {
+    event.preventDefault();
+
+    if (local3mfBusy) return;
+
+    event.dataTransfer.dropEffect = 'copy';
+
+    local3mfDropZone.classList.add(
+      'is-dragover'
+    );
+  }
+);
+
+local3mfDropZone?.addEventListener(
+  'dragleave',
+  event => {
+    if (
+      !local3mfDropZone.contains(
+        event.relatedTarget
+      )
+    ) {
+      local3mfDropZone.classList.remove(
+        'is-dragover'
+      );
+    }
+  }
+);
+
+local3mfDropZone?.addEventListener(
+  'drop',
+  async event => {
+    event.preventDefault();
+
+    local3mfDropZone.classList.remove(
+      'is-dragover'
+    );
+
+    if (local3mfBusy) return;
+
+    const files = event.dataTransfer?.files;
+
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    if (files.length > 1) {
+      // Clear the previous report when multiple files are dropped.
+      setLocal3mfReport();
+
+      setLocal3mfStatus(
+        'Please drop only one 3MF file at a time.',
+        'error'
+      );
+      return;
+    }
+
+    await handleLocal3mfFile(files[0]);
+  }
+);
+
 // ── Small storage helpers ─────────────────────────────────────────────────────
 
 function getSyncStorage(defaults) {
@@ -47,6 +820,191 @@ function getLocalStorage(defaults) {
 
 function setLocalStorage(values) {
   return new Promise(resolve => chrome.storage.local.set(values, resolve));
+}
+
+// ── Local 3MF converter options ───────────────────────────────────────────────
+
+async function getLocal3mfConverterOptions() {
+  // Use the same saved settings as the MakerWorld converter.
+  const settings = await getSyncStorage(DEFAULTS);
+
+  const useOrcaCompatibility =
+    settings.orcaCompatibility === true;
+
+  const selectedCustomPrinterProfileId =
+    useOrcaCompatibility
+      ? (
+          settings.orcaCustomPrinterProfileId ||
+          U1_CUSTOM_PRINTER_STANDARD_ID
+        )
+      : (
+          settings.customPrinterProfileId ||
+          U1_CUSTOM_PRINTER_STANDARD_ID
+        );
+
+  let customPrinterProfile = null;
+  let customPrinterProfileMissing = false;
+
+  if (
+    selectedCustomPrinterProfileId !==
+    U1_CUSTOM_PRINTER_STANDARD_ID
+  ) {
+    const storedProfiles = await getLocalStorage({
+      [U1_CUSTOM_PRINTER_PROFILE_STORAGE_KEY]: {},
+      [U1_ORCA_CUSTOM_PRINTER_PROFILE_STORAGE_KEY]: {}
+    });
+
+    const activeProfileMap =
+      useOrcaCompatibility
+        ? storedProfiles[
+            U1_ORCA_CUSTOM_PRINTER_PROFILE_STORAGE_KEY
+          ]
+        : storedProfiles[
+            U1_CUSTOM_PRINTER_PROFILE_STORAGE_KEY
+          ];
+
+    customPrinterProfile =
+      activeProfileMap?.[
+        selectedCustomPrinterProfileId
+      ] || null;
+
+    if (!customPrinterProfile) {
+      customPrinterProfileMissing = true;
+
+      console.warn(
+        '[U1 Local Conversion] Selected custom printer profile not found:',
+        selectedCustomPrinterProfileId
+      );
+    }
+  }
+
+  return {
+    ...settings,
+
+    customPrinterProfile,
+    customPrinterProfileMissing,
+    selectedCustomPrinterProfileId
+  };
+}
+
+// ── Local 3MF download ────────────────────────────────────────────────────────
+
+function getLocal3mfOutputFilename(inputFilename) {
+  const baseName = String(inputFilename || '')
+    .replace(/\.3mf$/i, '')
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .trim();
+
+  return (baseName || 'Converted') + '-U1.3mf';
+}
+
+function sendLocal3mfDownloadMessage(message) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      message,
+      response => {
+        const runtimeError =
+          chrome.runtime.lastError?.message;
+
+        if (runtimeError) {
+          reject(new Error(runtimeError));
+          return;
+        }
+
+        if (!response?.ok) {
+          reject(
+            new Error(
+              response?.error ||
+              'The browser could not start the download.'
+            )
+          );
+          return;
+        }
+
+        resolve(response);
+      }
+    );
+  });
+}
+
+async function downloadLocal3mf(
+  converted,
+  inputFilename,
+  converterOptions
+) {
+  if (
+    !(converted instanceof Uint8Array) ||
+    converted.byteLength === 0
+  ) {
+    throw new Error(
+      'Cannot download empty or invalid conversion output.'
+    );
+  }
+
+  const filename =
+    getLocal3mfOutputFilename(inputFilename);
+
+  const isFirefox =
+    typeof browser !== 'undefined' &&
+    typeof browser.runtime?.getBrowserInfo === 'function';
+
+  if (isFirefox) {
+    // Firefox: send the converted binary data to the existing
+    // background download handler.
+
+    const downloadData =
+      converted.buffer.slice(
+        converted.byteOffset,
+        converted.byteOffset + converted.byteLength
+      );
+
+    const response =
+      await sendLocal3mfDownloadMessage({
+        type: 'u1_download_firefox',
+        data: downloadData,
+        filename
+      });
+
+    return {
+      filename,
+      downloadId: response.downloadId ?? null
+    };
+  }
+
+  // Chrome / Chromium: use a temporary Blob URL and the
+  // existing background download handler.
+
+  const outputBlob = new Blob(
+    [converted],
+    { type: 'application/octet-stream' }
+  );
+
+  const outputUrl =
+    URL.createObjectURL(outputBlob);
+
+  try {
+    const response =
+      await sendLocal3mfDownloadMessage({
+        type: 'u1_download',
+        url: outputUrl,
+        filename,
+        forceFilename:
+          converterOptions.forceDownloadFilename === true
+      });
+
+    return {
+      filename,
+      downloadId: response.downloadId ?? null
+    };
+
+  } finally {
+    // Give the browser's download manager enough time
+    // to access the temporary Blob URL.
+
+    setTimeout(() => {
+      URL.revokeObjectURL(outputUrl);
+    }, 60_000);
+  }
 }
 
 function setStatus(text, isError = false) {
@@ -681,7 +1639,7 @@ document.getElementById('printProfileModeForce')?.addEventListener('change', upd
         false;
     }
   }
-    
+
   document.getElementById('debugReport').checked = s.debugReport;
   document.getElementById('deepDebugReport').checked = s.deepDebugReport;
   document.getElementById('smartProcessMerge').checked = s.smartProcessMerge;
