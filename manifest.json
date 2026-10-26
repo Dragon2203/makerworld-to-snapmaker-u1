@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MakerWorld to Snapmaker U1",
-  "version": "1.7.0",
-  "version_name": "1.7.0",
+  "version": "1.8.0",
+  "version_name": "1.8.0",
   "description": "Convert MakerWorld print profiles into Snapmaker U1 project files directly in your browser.",
   "icons": {
   "16": "assets/icons/icon16.png",
@@ -51,6 +51,7 @@
         "converter.js",
         "u1_error_report.js",
         "u1_download_settings.js",
+        "u1_output_download.js",
         "content.js"
       ],
       "run_at": "document_idle"

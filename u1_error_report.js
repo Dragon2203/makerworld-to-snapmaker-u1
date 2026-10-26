@@ -311,6 +311,16 @@ function buildU1ErrorReportText(
     '',
     `Extension version: ${report.environment.converterVersion}`,
     `Browser: ${report.environment.browser}`,
+
+    // Include the source and original filename when available.
+    ...(report.metadata?.source
+      ? [`Source: ${report.metadata.source}`]
+      : []),
+
+    ...(report.metadata?.filename
+      ? [`Filename: ${report.metadata.filename}`]
+      : []),
+
     '',
     `Error code: ${report.summary.code}`,
     `Stage: ${report.summary.stageLabel}`,

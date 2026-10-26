@@ -4,14 +4,10 @@ const { join } = require('node:path');
 const { test } = require('node:test');
 const vm = require('node:vm');
 
-// Exercise the actual output transport setup without running MakerWorld's UI.
-// content.js is a browser script, so keep its closure and production globals intact.
+// Execute the production shared workflow with browser API stubs.
 const source = readFileSync(join(__dirname, '../content.js'), 'utf8');
-const setup = source.slice(
-  source.indexOf('      let releaseOutputUrl ='),
-  source.indexOf('      async function runOutputDownloadAttempt(')
-);
-assert.ok(setup.includes('attemptOutputDownload'));
+const outputSource = readFileSync(join(__dirname, '../u1_output_download.js'), 'utf8');
+const optionsSource = readFileSync(join(__dirname, '../options.js'), 'utf8');
 
 const settingsSource = readFileSync(join(__dirname, '../u1_download_settings.js'), 'utf8');
 const resolveMethod = vm.runInNewContext(`${settingsSource}; resolveU1DownloadMethod`);
@@ -53,20 +49,22 @@ function createDownload({ firefox = false, method = 'chrome-api', runtimeError, 
       return responses.length ? responses.shift() : { ok: true, downloadId: 43 };
     } } },
   };
-  const download = vm.runInNewContext(`(() => { ${setup}; return attemptOutputDownload; })()`, context);
-  return { download, messages, clicks, converted, context };
+  return { messages, clicks, converted, context };
 }
 
-async function runOutputStage(harness, filename) {
+async function runOutputStage(harness, filename, { local = false, fault = 'none' } = {}) {
   const timers = [];
   const metadata = {};
   const operations = [];
   harness.metadata = metadata;
+  harness.operations = operations;
   const context = {
     ...harness.context,
     location: { pathname: '/en/models/123-model' },
     mwName: filename,
-    activeTestFault: 'none',
+    activeTestFault: fault,
+    console,
+    Uint8Array,
     diagnostics: { setMetadata(values) { Object.assign(metadata, values); }, startStage() {}, setOperation(value) { operations.push(value); }, clearOperation() {} },
     U1_DIAGNOSTIC_STAGES: { START_OUTPUT_DOWNLOAD: 'start-output-download' },
     getU1DiagnosticStageLabel() {},
@@ -74,10 +72,22 @@ async function runOutputStage(harness, filename) {
     logU1OutputDownloadReportSafe() {},
     setTimeout(callback, delay) { timers.push({ callback, delay }); },
   };
-  const helpers = source.slice(source.indexOf('  function isU1InvalidFilenameError('), source.indexOf('  function logU1OutputDownloadReportSafe('));
-  const stageStart = source.indexOf('      const slug =', source.indexOf('// 7. Start converted file download'));
-  const stageEnd = source.indexOf('      diagnostics.completeStage(', stageStart);
-  const run = vm.runInNewContext(`(async () => { ${helpers}\n${source.slice(stageStart, stageEnd)}\nreturn downloadReport; })()`, context);
+  const ctx = vm.createContext(context);
+  vm.runInContext(`${settingsSource}\n${outputSource}`, ctx);
+  let run;
+  if (local) {
+    const start = optionsSource.indexOf('function getLocal3mfOutputFilename(');
+    const end = optionsSource.indexOf('function setStatus(', start);
+    vm.runInContext(optionsSource.slice(start, end), ctx);
+    if (context.isFirefox) context.browser.runtime.getBrowserInfo = () => ({});
+    run = vm.runInContext('downloadLocal3mf(converted, mwName, currentSettings, diagnostics).then(result => result.report)', ctx);
+  } else {
+    const stageStart = source.indexOf('      const slug =', source.indexOf('// 7. Start converted file download'));
+    const stageEnd = source.indexOf('      diagnostics.completeStage(', stageStart);
+    // The MakerWorld adapter now delegates the entire output stage.
+    const adapter = source.slice(stageStart, stageEnd).replace('await downloadU1Output(', 'return await downloadU1Output(');
+    run = vm.runInContext(`(async () => { ${adapter} })()`, ctx);
+  }
   return { report: await run, timers, metadata, operations };
 }
 
@@ -295,6 +305,8 @@ test('both browser packages and the options page load the shared settings resolv
   for (const name of ['manifest.json', 'manifest.firefox.json']) {
     const manifest = JSON.parse(readFileSync(join(__dirname, '..', name), 'utf8'));
     const scripts = manifest.content_scripts[0].js;
+    assert.ok(scripts.indexOf('u1_output_download.js') >= 0);
+    assert.ok(scripts.indexOf('u1_output_download.js') < scripts.indexOf('content.js'));
     assert.ok(scripts.indexOf('u1_download_settings.js') >= 0);
     assert.ok(scripts.indexOf('u1_download_settings.js') < scripts.indexOf('content.js'));
   }
@@ -302,4 +314,130 @@ test('both browser packages and the options page load the shared settings resolv
   assert.ok(html.indexOf('src="u1_download_settings.js"') < html.indexOf('src="options.js"'));
   const build = readFileSync(join(__dirname, '../build.ps1'), 'utf8');
   assert.equal(build.match(/'u1_download_settings.js'/g).length, 2);
+  assert.equal(build.match(/'u1_output_download.js'/g).length, 2);
+  assert.ok(html.indexOf('src="u1_output_download.js"') < html.indexOf('src="options.js"'));
+});
+
+for (const method of methods) {
+  test(`local ${method}: shared transport, naming and copy-ready report`, async () => {
+    const harness = createDownload({ method });
+    const { report, timers } = await runOutputStage(harness, '本地:测试.3mf', { local: true });
+    assert.equal(report.finalFilename, '本地_测试-U1.3mf');
+    assert.equal(report.downloadMethod, method);
+    assert.equal(report.status, method === 'native-html' ? 'initiated' : 'accepted');
+    assert.equal(report.filenameForced, method === 'chrome-api-force');
+    assert.equal(harness.clicks.length, method === 'native-html' ? 1 : 0);
+    assert.equal(harness.messages.length, method === 'native-html' ? 0 : 1);
+    if (method !== 'native-html') assert.equal(harness.messages[0].forceFilename, method === 'chrome-api-force');
+    assert.equal(timers[0].delay, 60_000);
+    const ctx = vm.createContext({ report });
+    vm.runInContext(readFileSync(join(__dirname, '../u1_project_report.js'), 'utf8'), ctx);
+    const text = vm.runInContext('buildU1OutputDownloadReportText(report)', ctx);
+    assert.ok(text.includes(`Configured method: ${method}`));
+    assert.ok(text.includes(`Actual transport: ${method}`));
+    assert.ok(text.includes(`Status: ${report.status}`));
+    assert.ok(text.includes('completion is not confirmed'));
+  });
+
+  test(`local ${method}: failures keep diagnostic method and operation`, async () => {
+    const harness = createDownload({ method, clickError: 'Click denied', responses: [{ ok: false, error: 'Download denied' }] });
+    await assert.rejects(runOutputStage(harness, 'model.3mf', { local: true }), error => {
+      assert.equal(error.u1DiagnosticContext.downloadMethod, method);
+      assert.equal(error.u1DiagnosticContext.downloadStatus, 'failed');
+      assert.equal(harness.operations.at(-1).downloadMethod, method);
+      assert.equal(harness.operations.at(-1).originalFilename, 'model-U1.3mf');
+      return true;
+    });
+  });
+
+  test(`local Firefox ignores ${method} and preserves callback binary messages`, async () => {
+    const harness = createDownload({ firefox: true, method });
+    // Local Firefox uses chrome.runtime's callback API, as in v1.8.0.
+    harness.context.browser.runtime.sendMessage = () => assert.fail('Local Firefox must keep the callback path');
+    harness.context.chrome.runtime.sendMessage = (message, callback) => {
+      harness.messages.push(message);
+      callback({ ok: true, downloadId: 43 });
+    };
+    const { report } = await runOutputStage(harness, 'model.3mf', { local: true });
+    assert.equal(harness.messages[0].type, 'u1_download_firefox');
+    assert.deepEqual(new Uint8Array(harness.messages[0].data), harness.converted);
+    assert.equal(report.configuredDownloadMethod, method);
+    assert.equal(report.downloadMethod, 'firefox');
+    assert.equal(report.filenameForced, false);
+    assert.equal(harness.clicks.length, 0);
+  });
+}
+
+for (const local of [false, true]) {
+  for (const method of ['chrome-api', 'chrome-api-force']) {
+    test(`${local ? 'local' : 'MakerWorld'} ${method}: failed normalized retry has method in the final operation`, async () => {
+      const harness = createDownload({ method, responses: [
+        { ok: false, error: 'Invalid filename' },
+        { ok: false, error: 'Retry denied', downloadMethod: 'chrome-api' },
+      ] });
+      await assert.rejects(runOutputStage(harness, 'emoji\u200dname.3mf', { local }), error => {
+        const operation = harness.operations.at(-1);
+        assert.equal(operation.configuredDownloadMethod, method);
+        assert.equal(operation.downloadMethod, 'chrome-api');
+        assert.equal(operation.downloadStatus, 'failed');
+        assert.equal(operation.downloadAttemptType, 'normalized-fallback');
+        assert.equal(error.u1DiagnosticContext.downloadAttempts.length, 2);
+        assert.equal(error.u1DiagnosticContext.downloadMethod, 'chrome-api');
+        return true;
+      });
+    });
+  }
+}
+
+test('local saved settings resolve migration before conversion and project reporting', async () => {
+  const start = optionsSource.indexOf('async function getLocal3mfConverterOptions(');
+  const end = optionsSource.indexOf('// ── Local 3MF download', start);
+  for (const saved of [{ forceDownloadFilename: true }, { forceDownloadFilename: false }, { forceDownloadFilename: true, downloadMethod: 'native-html' }]) {
+    const ctx = vm.createContext({ DEFAULTS: {}, U1_CUSTOM_PRINTER_STANDARD_ID: 'standard', getSyncStorage: async () => ({ ...saved }) });
+    vm.runInContext(`${settingsSource}\n${optionsSource.slice(start, end)}`, ctx);
+    const settings = await vm.runInContext('getLocal3mfConverterOptions()', ctx);
+    assert.equal(settings.downloadMethod, resolveMethod(saved));
+    assert.equal(settings.forceDownloadFilename, settings.downloadMethod === 'chrome-api-force');
+  }
+});
+
+test('local conversion lifecycle retains reports, error codes and UI cleanup', async () => {
+  for (const failure of [false, true]) {
+    const harness = createDownload({ method: 'native-html', clickError: failure ? 'Click denied' : undefined });
+    const elements = {};
+    const element = id => elements[id] ||= { hidden: true, classList: { toggle() {} } };
+    const ctx = vm.createContext({
+      ...harness.context, Uint8Array, ArrayBuffer, Error, performance, structuredClone,
+      console: { info() {}, warn() {}, error() {}, log() {}, groupCollapsed() {}, groupEnd() {} },
+      document: { ...harness.context.document, getElementById: element },
+      setTimeout() {}, U1_CUSTOM_PRINTER_STANDARD_ID: 'standard',
+      getConverterVersion: () => '1.8.0',
+    });
+    for (const file of ['converter.js', 'u1_project_report.js', 'u1_error_report.js']) {
+      vm.runInContext(readFileSync(join(__dirname, '..', file), 'utf8'), ctx);
+    }
+    vm.runInContext(`${settingsSource}\n${outputSource}`, ctx);
+    const localUi = optionsSource.slice(optionsSource.indexOf('const local3mfDropZone ='), optionsSource.indexOf('// ── Copy local 3MF report'));
+    const download = optionsSource.slice(optionsSource.indexOf('function getLocal3mfOutputFilename('), optionsSource.indexOf('function setStatus('));
+    vm.runInContext(`${localUi}\n${download}`, ctx);
+    ctx.getLocal3mfConverterOptions = async () => ({ downloadMethod: 'native-html' });
+    ctx.convertToU1 = async (bytes, options) => { options.onProjectReport({}); return harness.converted; };
+    ctx.buildU1ProjectReportText = () => 'Project conversion report';
+    ctx.file = { name: 'local.3mf', size: 4, async arrayBuffer() { return new ArrayBuffer(4); } };
+    await vm.runInContext('handleLocal3mfFile(file)', ctx);
+    assert.equal(element('local3mfChooseBtn').disabled, false);
+    const text = vm.runInContext('local3mfReportText', ctx);
+    if (failure) {
+      assert.equal(element('local3mfCopyReportBtn').textContent, 'Copy Error Report');
+      assert.match(text, /U1-DL-005/);
+      assert.match(text, /native-html/);
+      assert.match(element('local3mfStatus').textContent, /Download failed/);
+    } else {
+      assert.equal(element('local3mfCopyReportBtn').textContent, 'Copy Project Report');
+      assert.match(text, /Project conversion report/);
+      assert.match(text, /Actual transport: native-html/);
+      assert.match(text, /Status: initiated/);
+      assert.match(element('local3mfStatus').textContent, /Download requested/);
+    }
+  }
 });

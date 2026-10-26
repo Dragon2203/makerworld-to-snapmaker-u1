@@ -8,7 +8,23 @@ This project follows the principles of **Keep a Changelog** and uses **Semantic 
 
 ### Added
 - Add a **Converted file download method** selector with Standard, Force filename (Chrome API), and Native HTML download. Native HTML avoids the filename-listener conflict with Free Download Manager while retaining the existing API implementations and Firefox pipeline.
+- Apply the selected method to both MakerWorld and local 3MF conversions through a shared download, retry and diagnostic workflow.
 - Preserve legacy filename-forcing preferences and report configured/actual download methods, distinguishing native initiation from API acceptance.
+
+## [1.8.0] - 2026-10-24
+
+### Added
+- Added local 3MF conversion directly from the extension settings, allowing previously downloaded MakerWorld and Bambu Studio projects to be converted without visiting MakerWorld.
+- Added drag & drop and file selection for local `.3mf` projects.
+- Added automatic conversion and download of local projects using the existing converter engine and saved settings.
+- Added support for custom Snapmaker Orca and OrcaSlicer printer profiles during local conversion.
+- Added copyable Project Reports for successful local conversions and Error Reports for failed conversions.
+
+### Improved
+- Extended the existing conversion engine with an optional project report callback for local conversions.
+- Improved error reports by including the conversion source and original filename when available.
+- Added local file validation and dedicated status messages for local conversion.
+- Reused the existing Chrome/Chromium and Firefox download pipelines for locally converted projects.
 
 ## [1.7.0] - 2026-09-27
 
