@@ -765,7 +765,7 @@ function logU1OutputDownloadReport(
   const successfulAttempt =
     attempts.find(
       attempt =>
-        attempt.result === 'ok'
+        attempt.result === 'accepted'
     ) ||
     null;
 
@@ -778,9 +778,19 @@ function logU1OutputDownloadReport(
       downloadReport.browser ||
       null,
 
+    configuredDownloadMethod:
+      downloadReport.configuredDownloadMethod || null,
+
+    downloadMethod:
+      downloadReport.downloadMethod || null,
+
+    status:
+      downloadReport.status || null,
+
+    // null means a native click was initiated without an acceptance receipt.
+    // true means API acceptance, never confirmed completion on disk.
     success:
-      downloadReport.success ===
-      true,
+      downloadReport.success ?? null,
 
     expectedFilename:
       downloadReport.finalFilename ||
@@ -799,6 +809,8 @@ function logU1OutputDownloadReport(
       successfulAttempt?.downloadId ??
       null,
   });
+
+  console.log('attempts:', attempts);
 
   if (
     downloadReport.fallbackUsed ===

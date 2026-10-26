@@ -50,6 +50,7 @@
         "u1_project_report.js",
         "converter.js",
         "u1_error_report.js",
+        "u1_download_settings.js",
         "content.js"
       ],
       "run_at": "document_idle"

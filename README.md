@@ -185,17 +185,19 @@ Imported profiles are stored locally inside the browser and can be updated at an
 
 Choose whether filament presets should be preserved whenever possible or converted to Generic material presets.
 
-### Force Converted Download Filename
+### Converted File Download Method
 
-Chrome and other Chromium-based browsers can optionally force converted downloads to use the expected `.3mf` filename.
+Chrome and other Chromium-based browsers offer three mutually exclusive methods:
 
-This compatibility option is intended for cases where a converted project is downloaded with a random filename or without the `.3mf` extension.
+- **Standard (default)** uses `chrome.downloads.download()` without a filename listener. Keep this when downloads already work correctly.
+- **Force filename (Chrome API)** retains the existing `onDeterminingFilename` workaround for random filenames or missing `.3mf` extensions, including reported IDM compatibility issues.
+- **Native HTML download** uses a detached Blob download link to avoid competing filename listeners, including the conflict with Free Download Manager. Invalid filename characters are normalized before clicking. The HTML `download` attribute suggests a filename; it does not guarantee the final name.
 
-When enabled, the converted Blob is saved through a native download link instead of competing with download-manager extensions for the filename. Unsupported filename characters are normalized before saving.
+Existing installations with `forceDownloadFilename: true` retain **Force filename (Chrome API)**. A false or missing legacy setting uses **Standard**. An explicitly saved method takes precedence over the legacy setting. Firefox always uses its existing separate binary download pipeline, regardless of the Chromium preference.
 
-Leave this option disabled if converted downloads already use the correct filename.
+Project and error reports identify the configured method and actual transport (`chrome-api`, `chrome-api-force`, `native-html`, or `firefox`). A forced API request may fall back to `chrome-api` if its temporary state cannot be stored. `filenameForced` only indicates that the existing filename listener applied its suggestion; native HTML never sets it.
 
-> **Note:** This option is only available in Chromium-based browsers. Firefox uses a separate download pipeline and does not require this workaround. Download-manager extensions may also interfere with filenames and should be checked if download problems persist.
+Native reports use `status: initiated` and `success: null`: a click has no browser acceptance receipt. API reports use `status: accepted` and `success: true` after the API/filename-handler response. Neither status confirms completion on disk. Check the browser download list for completion and the actual filename.
 
 ---
 

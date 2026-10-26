@@ -46,6 +46,7 @@ function createButtonIconSvg(state) {
     forceBrimOff:          true,
     autoFixOrganicVariableLayer: true,
     fixMultiPlatePositioning: true,
+    downloadMethod:        null, // Preserve legacy migration when no method is stored.
     forceDownloadFilename: false,
     debugReport:           true,
     deepDebugReport:       false,
@@ -453,6 +454,10 @@ function createButtonIconSvg(state) {
     error.u1DiagnosticContext = {
       operation:
         'start-converted-file-download',
+
+      configuredDownloadMethod: downloadReport.configuredDownloadMethod,
+      downloadMethod: downloadReport.downloadMethod,
+      downloadStatus: downloadReport.status,
 
       browser:
         downloadReport.browser,
@@ -1562,6 +1567,11 @@ function createButtonIconSvg(state) {
           SETTING_DEFAULTS
         );
 
+      currentSettings.downloadMethod =
+        resolveU1DownloadMethod(currentSettings);
+      currentSettings.forceDownloadFilename =
+        currentSettings.downloadMethod === 'chrome-api-force';
+
       const useOrcaCompatibility =
         currentSettings.orcaCompatibility ===
         true;
@@ -1725,7 +1735,14 @@ function createButtonIconSvg(state) {
           outName
         );
 
+      const downloadMethod = currentSettings.downloadMethod;
+      const actualDownloadMethod = isFirefox ? 'firefox' : downloadMethod;
+
       const downloadReport = {
+        configuredDownloadMethod: downloadMethod,
+        downloadMethod: actualDownloadMethod,
+        status: 'pending',
+
         browser:
           isFirefox
             ? 'Firefox'
@@ -1753,8 +1770,7 @@ function createButtonIconSvg(state) {
 
         forceFilename:
           !isFirefox &&
-          currentSettings.forceDownloadFilename ===
-            true,
+          downloadMethod === 'chrome-api-force',
 
         filenameForced:
           false,
@@ -1770,6 +1786,10 @@ function createButtonIconSvg(state) {
       };
 
       diagnostics.setMetadata({
+        outputDownloadConfiguredMethod: downloadMethod,
+        outputDownloadMethod: actualDownloadMethod,
+        outputDownloadStatus: 'pending',
+
         outputDownloadOriginalFilename:
           downloadReport.originalFilename,
 
@@ -1801,6 +1821,9 @@ function createButtonIconSvg(state) {
           U1_DIAGNOSTIC_STAGES.START_OUTPUT_DOWNLOAD
         ),
         {
+          configuredDownloadMethod: downloadReport.configuredDownloadMethod,
+          downloadMethod: downloadReport.downloadMethod,
+
           browser:
             downloadReport.browser,
 
@@ -1873,8 +1896,8 @@ function createButtonIconSvg(state) {
           filename =>
             new Promise(
               (resolve, reject) => {
-                if (currentSettings.forceDownloadFilename === true) {
-                  // A native Blob download preserves the filename without
+                if (downloadMethod === 'native-html') {
+                  // A native Blob download suggests the filename without
                   // competing with download-manager extensions. Keep the link
                   // detached: injected.js blocks connected download links in U1 mode.
                   const link = document.createElement('a');
@@ -1882,7 +1905,7 @@ function createButtonIconSvg(state) {
                   link.download = filename;
                   link.click();
 
-                  resolve({ ok: true, filenameForced: true });
+                  resolve({ ok: true, downloadMethod: 'native-html', filenameForced: false });
                   return;
                 }
 
@@ -1890,6 +1913,9 @@ function createButtonIconSvg(state) {
                   {
                     type:
                       'u1_download',
+
+                    forceFilename:
+                      downloadMethod === 'chrome-api-force',
 
                     url:
                       outUrl,
@@ -1935,6 +1961,8 @@ function createButtonIconSvg(state) {
             1,
 
           type,
+          configuredDownloadMethod: downloadMethod,
+          downloadMethod: actualDownloadMethod,
 
           filename,
 
@@ -1956,6 +1984,9 @@ function createButtonIconSvg(state) {
         );
 
         diagnostics.setOperation({
+          configuredDownloadMethod: downloadReport.configuredDownloadMethod,
+          downloadMethod: actualDownloadMethod,
+
           operation:
             'start-converted-file-download',
 
@@ -1989,6 +2020,9 @@ function createButtonIconSvg(state) {
               filename
             );
 
+          attempt.downloadMethod = response?.downloadMethod || actualDownloadMethod;
+          downloadReport.downloadMethod = attempt.downloadMethod;
+
           if (!response?.ok) {
             throw new Error(
               response?.error ||
@@ -1996,8 +2030,10 @@ function createButtonIconSvg(state) {
             );
           }
 
-          attempt.result =
-            'ok';
+          attempt.result = attempt.downloadMethod === 'native-html'
+            ? 'initiated'
+            : 'accepted';
+          downloadReport.status = attempt.result;
 
           attempt.downloadId =
             response.downloadId ??
@@ -2029,6 +2065,7 @@ function createButtonIconSvg(state) {
 
           attempt.result =
             'failed';
+          downloadReport.status = 'failed';
 
           attempt.error =
             message;
@@ -2047,6 +2084,9 @@ function createButtonIconSvg(state) {
           };
         } finally {
           diagnostics.setMetadata({
+            outputDownloadMethod: downloadReport.downloadMethod,
+            outputDownloadStatus: downloadReport.status,
+
             outputDownloadFilenameForced:
               downloadReport.filenameForced,
 
@@ -2064,7 +2104,7 @@ function createButtonIconSvg(state) {
         // Native links do not report invalid-filename errors, so normalize
         // before clicking instead of waiting for the download API to reject it.
         const normalizeBeforeDownload =
-          downloadReport.forceFilename &&
+          actualDownloadMethod === 'native-html' &&
           downloadReport.fallbackAvailable;
 
         downloadReport.fallbackUsed =
@@ -2081,8 +2121,9 @@ function createButtonIconSvg(state) {
           );
 
         if (originalAttempt.ok) {
-          downloadReport.success =
-            true;
+          // Native clicks have no browser acceptance receipt. API acceptance
+          // also does not establish that the file finished writing to disk.
+          downloadReport.success = downloadReport.status === 'accepted' ? true : null;
 
           downloadReport.finalFilename =
             originalAttempt.attempt.filename;
@@ -2112,6 +2153,9 @@ function createButtonIconSvg(state) {
 
               type:
                 'normalized-fallback',
+
+              configuredDownloadMethod: downloadMethod,
+              downloadMethod: actualDownloadMethod,
 
               filename:
                 downloadReport.fallbackFilename,
@@ -2180,6 +2224,7 @@ function createButtonIconSvg(state) {
             downloadReport.finalFilename =
               downloadReport.fallbackFilename;
           } else {
+            downloadReport.status = 'failed';
             downloadReport.failedAttempt =
               'normalized-fallback';
 
@@ -2187,6 +2232,9 @@ function createButtonIconSvg(state) {
               downloadReport.fallbackFilename;
 
             diagnostics.setMetadata({
+              outputDownloadMethod: downloadReport.downloadMethod,
+              outputDownloadStatus: downloadReport.status,
+
               outputDownloadFinalFilename:
                 downloadReport.finalFilename,
 

@@ -17,6 +17,7 @@ const DEFAULTS = {
   forceBrimOff:          true,
   autoFixOrganicVariableLayer: true,
   fixMultiPlatePositioning: true,
+  downloadMethod:         null, // Preserve legacy migration when no method is stored.
   forceDownloadFilename:   false,
   debugReport:           true,
   deepDebugReport:       false,
@@ -485,6 +486,18 @@ async function deleteSelectedCustomPrinterProfile(target) {
   setStatus('Custom printer profile deleted ✓');
 }
 
+function updateDownloadMethodHint() {
+  const select = document.getElementById('downloadMethod');
+  const descriptions = {
+    'chrome-api': 'Uses the browser Downloads API. Keep this default when downloads already work correctly.',
+    'chrome-api-force': 'Uses the Downloads API with the existing filename workaround. Try this for random filenames or missing .3mf extensions, including with IDM.',
+    'native-html': 'Uses a native download link to avoid filename-listener conflicts, including with Free Download Manager. The suggested filename and download completion cannot be confirmed by the extension.',
+  };
+  document.getElementById('downloadMethodHint').textContent = select.disabled
+    ? 'Firefox always uses its separate download pipeline; this Chromium preference does not affect it.'
+    : descriptions[select.value];
+}
+
 // ── Save settings ─────────────────────────────────────────────────────────────
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
@@ -499,7 +512,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     forceBrimOff:          document.getElementById('forceBrimOff')?.checked ?? true,
     autoFixOrganicVariableLayer: document.getElementById('autoFixOrganicVariableLayer')?.checked ?? true,
     fixMultiPlatePositioning: document.getElementById('fixMultiPlatePositioning')?.checked ?? true,
-    forceDownloadFilename: !chrome.runtime.getURL('').startsWith('moz-extension://') && (document.getElementById('forceDownloadFilename')?.checked === true),
+    downloadMethod:        document.getElementById('downloadMethod').value,
     debugReport:           document.getElementById('debugReport')?.checked ?? true,
     deepDebugReport:       document.getElementById('deepDebugReport')?.checked ?? false,
     smartProcessMerge:     document.getElementById('smartProcessMerge')?.checked ?? true,
@@ -509,6 +522,8 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
       : 'none',
   };
 
+  // Keep the legacy key coherent for older installations sharing sync storage.
+  settings.forceDownloadFilename = settings.downloadMethod === 'chrome-api-force';
   await setSyncStorage(settings);
   setStatus('Saved ✓');
 });
@@ -656,32 +671,12 @@ document.getElementById('printProfileModeForce')?.addEventListener('change', upd
   document.getElementById('fixMultiPlatePositioning').checked =
     s.fixMultiPlatePositioning;
 
-  const forceDownloadFilenameCheckbox =
-    document.getElementById(
-      'forceDownloadFilename'
-    );
+  const downloadMethodSelect = document.getElementById('downloadMethod');
+  downloadMethodSelect.value = resolveU1DownloadMethod(s);
+  downloadMethodSelect.disabled = chrome.runtime.getURL('').startsWith('moz-extension://');
+  downloadMethodSelect.addEventListener('change', updateDownloadMethodHint);
+  updateDownloadMethodHint();
 
-  const isFirefox =
-    chrome.runtime
-      .getURL('')
-      .startsWith(
-        'moz-extension://'
-      );
-
-  if (forceDownloadFilenameCheckbox) {
-    forceDownloadFilenameCheckbox.checked =
-      !isFirefox &&
-      s.forceDownloadFilename === true;
-
-    forceDownloadFilenameCheckbox.disabled =
-      isFirefox;
-
-    if (isFirefox) {
-      forceDownloadFilenameCheckbox.checked =
-        false;
-    }
-  }
-    
   document.getElementById('debugReport').checked = s.debugReport;
   document.getElementById('deepDebugReport').checked = s.deepDebugReport;
   document.getElementById('smartProcessMerge').checked = s.smartProcessMerge;

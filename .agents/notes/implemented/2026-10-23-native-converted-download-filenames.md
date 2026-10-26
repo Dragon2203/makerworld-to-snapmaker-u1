@@ -2,6 +2,8 @@
 
 Status: implemented
 
+Superseded-by: [Selectable download methods](2026-10-26-selectable-download-methods.md)
+
 ## Problem
 
 With Free Download Manager enabled, Chromium can discard the filename passed to `downloads.download()` and save a converted Blob as its UUID. The existing filename-forcing workaround restores the name through `onDeterminingFilename`, but this competes with FDM's listener and produces a persistent extension warning even when the download completes. FDM already skips Blob URLs; its globally registered filename listener still participates in arbitration.

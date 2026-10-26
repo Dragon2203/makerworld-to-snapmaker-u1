@@ -6,8 +6,9 @@ This project follows the principles of **Keep a Changelog** and uses **Semantic 
 
 ## [Unreleased]
 
-### Fixed
-- Use a native Blob download for Chromium's **Force converted download filename** option to preserve `.3mf` filenames without competing with download-manager extensions such as Free Download Manager.
+### Added
+- Add a **Converted file download method** selector with Standard, Force filename (Chrome API), and Native HTML download. Native HTML avoids the filename-listener conflict with Free Download Manager while retaining the existing API implementations and Firefox pipeline.
+- Preserve legacy filename-forcing preferences and report configured/actual download methods, distinguishing native initiation from API acceptance.
 
 ## [1.7.0] - 2026-09-27
 
