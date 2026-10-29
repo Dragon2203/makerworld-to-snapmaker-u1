@@ -513,22 +513,13 @@
   </div>
 
   <div class="option-row">
-    <label>
-      <input type="checkbox" id="forceDownloadFilename">
-      <span>Force converted download filename (Chromium only)</span>
-    </label>
-
-    <p class="hint">
-      Chromium compatibility option for Chrome, Edge and other Chromium-based
-      browsers. Forces converted downloads to use the expected .3mf filename.
-      Enable this if converted files are saved with a random filename or without
-      the .3mf extension. Leave this disabled when downloads already work correctly.
-    </p>
-
-    <p class="hint">
-      Download-manager extensions may also modify filenames. Disable this
-      option if it causes conflicts with another download extension.
-    </p>
+    <label for="downloadMethod">Converted file download method (Chromium only)</label>
+    <select id="downloadMethod" aria-describedby="downloadMethodHint">
+      <option value="chrome-api">Standard (default)</option>
+      <option value="chrome-api-force">Force filename (Chrome API)</option>
+      <option value="native-html">Native HTML download</option>
+    </select>
+    <p class="hint" id="downloadMethodHint"></p>
   </div>
   
   <div class="option-row">
@@ -716,6 +707,8 @@
 <script src="lib/jszip.min.js"></script>
 
 <script src="u1_custom_printer_profiles.js"></script>
+<script src="u1_download_settings.js"></script>
+
 <script src="u1_filament_merge.js"></script>
 <script src="u1_project_merge.js"></script>
 <script src="u1_profile_resolver.js"></script>
@@ -729,6 +722,7 @@
 <script src="converter.js"></script>
 <script src="u1_error_report.js"></script>
 
+<script src="u1_output_download.js"></script>
 <script src="options.js"></script>
 </body>
 </html>

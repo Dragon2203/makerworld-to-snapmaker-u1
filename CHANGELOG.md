@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
+## [Unreleased]
+
+### Added
+- Add a **Converted file download method** selector with Standard, Force filename (Chrome API), and Native HTML download. Native HTML avoids the filename-listener conflict with Free Download Manager while retaining the existing API implementations and Firefox pipeline.
+- Apply the selected method to both MakerWorld and local 3MF conversions through a shared download, retry and diagnostic workflow.
+- Preserve legacy filename-forcing preferences and report configured/actual download methods, distinguishing native initiation from API acceptance.
+
 ## [1.8.0] - 2026-10-24
 
 ### Added

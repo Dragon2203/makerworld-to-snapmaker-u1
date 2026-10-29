@@ -98,6 +98,9 @@ function completeU1DownloadResponse(
     ok:
       true,
 
+    downloadMethod:
+      'chrome-api-force',
+
     downloadId:
       downloadId ??
       null,
@@ -297,6 +300,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             );
 
             sendResponse({
+              downloadMethod:
+                'chrome-api',
+
               ok:
                 false,
 
@@ -307,6 +313,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           }
 
           sendResponse({
+            downloadMethod:
+              'chrome-api',
+
             ok:
               true,
 
@@ -381,6 +390,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               );
 
               sendResponse({
+                downloadMethod:
+                  'chrome-api-force',
+
                 ok:
                   false,
 
@@ -441,6 +453,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                     .lastError.message;
 
                 sendResponse({
+                  downloadMethod:
+                    'chrome-api',
+
                   ok:
                     false,
 
@@ -451,6 +466,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               }
 
               sendResponse({
+                downloadMethod:
+                  'chrome-api',
+
                 ok:
                   true,
 

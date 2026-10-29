@@ -17,6 +17,7 @@ const DEFAULTS = {
   forceBrimOff:          true,
   autoFixOrganicVariableLayer: true,
   fixMultiPlatePositioning: true,
+  downloadMethod:         null, // Preserve legacy migration when no method is stored.
   forceDownloadFilename:   false,
   debugReport:           true,
   deepDebugReport:       false,
@@ -323,20 +324,6 @@ async function handleLocal3mfFile(file) {
 
     local3mfStage = 'download';
 
-    localDiagnostics.startStage(
-      U1_DIAGNOSTIC_STAGES.START_OUTPUT_DOWNLOAD,
-      getU1DiagnosticStageLabel(
-        U1_DIAGNOSTIC_STAGES.START_OUTPUT_DOWNLOAD
-      ),
-      {
-        filename:
-          getLocal3mfOutputFilename(file.name),
-
-        outputBytes:
-          converted.byteLength
-      }
-    );
-
     setLocal3mfStatus(
       'Starting download...',
       'loading'
@@ -346,7 +333,8 @@ async function handleLocal3mfFile(file) {
       await downloadLocal3mf(
         converted,
         file.name,
-        converterOptions
+        converterOptions,
+        localDiagnostics
       );
 
     localDiagnostics.setMetadata({
@@ -382,7 +370,10 @@ async function handleLocal3mfFile(file) {
       '[U1 Local Conversion] Download started:',
       {
         filename: downloadResult.filename,
-        downloadId: downloadResult.downloadId
+        downloadId: downloadResult.downloadId,
+        configuredDownloadMethod: downloadResult.report.configuredDownloadMethod,
+        downloadMethod: downloadResult.report.downloadMethod,
+        status: downloadResult.report.status
       }
     );
 
@@ -391,7 +382,10 @@ async function handleLocal3mfFile(file) {
       downloadResult.filename +
       ' (' +
       (conversionDuration / 1000).toFixed(2) +
-      ' s). Download started.',
+      ' s). ' +
+      (downloadResult.report.status === 'initiated'
+        ? 'Download requested. Check browser downloads for completion.'
+        : 'Download accepted by the browser. Check downloads for completion.'),
       'success'
     );
 
@@ -400,7 +394,8 @@ async function handleLocal3mfFile(file) {
     if (localProjectReportText) {
       setLocal3mfReport(
         'project',
-        localProjectReportText
+        localProjectReportText + '\n\n' +
+        buildU1OutputDownloadReportText(downloadResult.report)
       );
     }
 
@@ -827,6 +822,10 @@ function setLocalStorage(values) {
 async function getLocal3mfConverterOptions() {
   // Use the same saved settings as the MakerWorld converter.
   const settings = await getSyncStorage(DEFAULTS);
+  settings.downloadMethod =
+    resolveU1DownloadMethod(settings);
+  settings.forceDownloadFilename =
+    settings.downloadMethod === 'chrome-api-force';
 
   const useOrcaCompatibility =
     settings.orcaCompatibility === true;
@@ -930,7 +929,8 @@ function sendLocal3mfDownloadMessage(message) {
 async function downloadLocal3mf(
   converted,
   inputFilename,
-  converterOptions
+  converterOptions,
+  diagnostics
 ) {
   if (
     !(converted instanceof Uint8Array) ||
@@ -941,70 +941,36 @@ async function downloadLocal3mf(
     );
   }
 
-  const filename =
-    getLocal3mfOutputFilename(inputFilename);
-
   const isFirefox =
     typeof browser !== 'undefined' &&
     typeof browser.runtime?.getBrowserInfo === 'function';
 
-  if (isFirefox) {
-    // Firefox: send the converted binary data to the existing
-    // background download handler.
+  const report =
+    await downloadU1Output({
+      converted,
+      outName:
+        getLocal3mfOutputFilename(inputFilename),
+      currentSettings:
+        converterOptions,
+      diagnostics,
+      isFirefox,
+      // Preserve the local Firefox callback-message pipeline.
+      sendFirefoxDownload:
+        sendLocal3mfDownloadMessage,
+    });
 
-    const downloadData =
-      converted.buffer.slice(
-        converted.byteOffset,
-        converted.byteOffset + converted.byteLength
-      );
+  const acceptedAttempt =
+    report.attempts.find(
+      attempt => attempt.result === 'accepted'
+    );
 
-    const response =
-      await sendLocal3mfDownloadMessage({
-        type: 'u1_download_firefox',
-        data: downloadData,
-        filename
-      });
-
-    return {
-      filename,
-      downloadId: response.downloadId ?? null
-    };
-  }
-
-  // Chrome / Chromium: use a temporary Blob URL and the
-  // existing background download handler.
-
-  const outputBlob = new Blob(
-    [converted],
-    { type: 'application/octet-stream' }
-  );
-
-  const outputUrl =
-    URL.createObjectURL(outputBlob);
-
-  try {
-    const response =
-      await sendLocal3mfDownloadMessage({
-        type: 'u1_download',
-        url: outputUrl,
-        filename,
-        forceFilename:
-          converterOptions.forceDownloadFilename === true
-      });
-
-    return {
-      filename,
-      downloadId: response.downloadId ?? null
-    };
-
-  } finally {
-    // Give the browser's download manager enough time
-    // to access the temporary Blob URL.
-
-    setTimeout(() => {
-      URL.revokeObjectURL(outputUrl);
-    }, 60_000);
-  }
+  return {
+    filename:
+      report.finalFilename,
+    downloadId:
+      acceptedAttempt?.downloadId ?? null,
+    report,
+  };
 }
 
 function setStatus(text, isError = false) {
@@ -1443,6 +1409,20 @@ async function deleteSelectedCustomPrinterProfile(target) {
   setStatus('Custom printer profile deleted ✓');
 }
 
+function updateDownloadMethodHint() {
+  const select =
+    document.getElementById('downloadMethod');
+  const descriptions = {
+    'chrome-api': 'Uses the browser Downloads API. Keep this default when downloads already work correctly.',
+    'chrome-api-force': 'Uses the Downloads API with the existing filename workaround. Try this for random filenames or missing .3mf extensions, including with IDM.',
+    'native-html': 'Uses a native download link to avoid filename-listener conflicts, including with Free Download Manager. The suggested filename and download completion cannot be confirmed by the extension.',
+  };
+  document.getElementById('downloadMethodHint').textContent =
+    select.disabled
+    ? 'Firefox always uses its separate download pipeline; this Chromium preference does not affect it.'
+    : descriptions[select.value];
+}
+
 // ── Save settings ─────────────────────────────────────────────────────────────
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
@@ -1457,7 +1437,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     forceBrimOff:          document.getElementById('forceBrimOff')?.checked ?? true,
     autoFixOrganicVariableLayer: document.getElementById('autoFixOrganicVariableLayer')?.checked ?? true,
     fixMultiPlatePositioning: document.getElementById('fixMultiPlatePositioning')?.checked ?? true,
-    forceDownloadFilename: !chrome.runtime.getURL('').startsWith('moz-extension://') && (document.getElementById('forceDownloadFilename')?.checked === true),
+    downloadMethod:        document.getElementById('downloadMethod').value,
     debugReport:           document.getElementById('debugReport')?.checked ?? true,
     deepDebugReport:       document.getElementById('deepDebugReport')?.checked ?? false,
     smartProcessMerge:     document.getElementById('smartProcessMerge')?.checked ?? true,
@@ -1467,6 +1447,9 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
       : 'none',
   };
 
+  // Keep the legacy key coherent for older installations sharing sync storage.
+  settings.forceDownloadFilename =
+    settings.downloadMethod === 'chrome-api-force';
   await setSyncStorage(settings);
   setStatus('Saved ✓');
 });
@@ -1614,31 +1597,17 @@ document.getElementById('printProfileModeForce')?.addEventListener('change', upd
   document.getElementById('fixMultiPlatePositioning').checked =
     s.fixMultiPlatePositioning;
 
-  const forceDownloadFilenameCheckbox =
-    document.getElementById(
-      'forceDownloadFilename'
-    );
-
-  const isFirefox =
-    chrome.runtime
-      .getURL('')
-      .startsWith(
-        'moz-extension://'
-      );
-
-  if (forceDownloadFilenameCheckbox) {
-    forceDownloadFilenameCheckbox.checked =
-      !isFirefox &&
-      s.forceDownloadFilename === true;
-
-    forceDownloadFilenameCheckbox.disabled =
-      isFirefox;
-
-    if (isFirefox) {
-      forceDownloadFilenameCheckbox.checked =
-        false;
-    }
-  }
+  const downloadMethodSelect =
+    document.getElementById('downloadMethod');
+  downloadMethodSelect.value =
+    resolveU1DownloadMethod(s);
+  downloadMethodSelect.disabled =
+    chrome.runtime.getURL('').startsWith('moz-extension://');
+  downloadMethodSelect.addEventListener(
+    'change',
+    updateDownloadMethodHint
+  );
+  updateDownloadMethodHint();
 
   document.getElementById('debugReport').checked = s.debugReport;
   document.getElementById('deepDebugReport').checked = s.deepDebugReport;

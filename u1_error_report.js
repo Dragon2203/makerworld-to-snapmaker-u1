@@ -111,6 +111,24 @@ function buildU1ErrorReportObject(
   const filenameHandling =
     filenameHandlingRelevant
       ? {
+          configuredDownloadMethod:
+            context.configuredDownloadMethod ||
+            metadata.outputDownloadConfiguredMethod || null,
+
+          downloadMethod:
+            context.downloadMethod ||
+            metadata.outputDownloadMethod || null,
+
+          downloadStatus:
+            context.downloadStatus ||
+            metadata.outputDownloadStatus || null,
+
+          forceFilename:
+            context.forceFilename ?? metadata.outputDownloadForceFilename ?? false,
+
+          filenameForced:
+            context.filenameForced ?? metadata.outputDownloadFilenameForced ?? false,
+
           originalFilename:
             context.originalFilename ||
             metadata.outputDownloadOriginalFilename ||

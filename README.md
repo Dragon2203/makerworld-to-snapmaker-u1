@@ -224,15 +224,27 @@ Imported profiles are stored locally inside the browser and can be updated at an
 
 Choose whether filament presets should be preserved whenever possible or converted to Generic material presets.
 
-### Force Converted Download Filename
+### Converted File Download Method
 
-Chrome and other Chromium-based browsers can optionally force converted downloads to use the expected `.3mf` filename.
+Start with **Standard**. If files get random names or lose the `.3mf` extension, try **Force filename (Chrome API)**. If your download manager reports filename conflicts, particularly with Free Download Manager, try **Native HTML download**.
 
-This compatibility option is intended for cases where a converted project is downloaded with a random filename or without the `.3mf` extension.
+The selected method applies to both MakerWorld downloads and **Convert Local 3MF** in the settings page. Save the setting before converting a local file.
 
-Leave this option disabled if converted downloads already use the correct filename.
+![Available download methods, with all options shown](screenshots/download-methods.png)
 
-> **Note:** This option is only available in Chromium-based browsers. Firefox uses a separate download pipeline and does not require this workaround. Download-manager extensions may also interfere with filenames and should be checked if download problems persist.
+*All three choices are shown for reference; the setting normally opens as a dropdown.*
+
+- **Standard (default):** the normal browser download method; keep it when downloads already work correctly.
+- **Force filename (Chrome API):** the existing filename workaround, including for reported IDM compatibility issues.
+- **Native HTML download:** an alternative for filename-listener conflicts, including with FDM. Check the browser download list to confirm the file was saved.
+
+**Compatibility and reporting details:** Standard uses `chrome.downloads.download()` without a filename listener; Force filename adds the existing `onDeterminingFilename` workaround. Native HTML uses a detached Blob link and normalizes invalid filename characters before clicking. Its `download` attribute suggests a filename rather than guaranteeing it. Both conversion entry points share the output-download workflow, retries and diagnostics; local conversions retain their existing input filename sanitization.
+
+Existing installations with `forceDownloadFilename: true` retain **Force filename (Chrome API)**. A false or missing legacy setting uses **Standard**. An explicitly saved method takes precedence over the legacy setting. Firefox always uses its existing separate binary download pipeline, regardless of the Chromium preference.
+
+Project and error reports identify the configured method and actual transport (`chrome-api`, `chrome-api-force`, `native-html`, or `firefox`). A forced API request may fall back to `chrome-api` if its temporary state cannot be stored. `filenameForced` only indicates that the existing filename listener applied its suggestion; native HTML never sets it.
+
+Native reports use `status: initiated` and `success: null`: a click has no browser acceptance receipt. API reports use `status: accepted` and `success: true` after the API/filename-handler response. Neither status confirms completion on disk. Check the browser download list for completion and the actual filename.
 
 ---
 
