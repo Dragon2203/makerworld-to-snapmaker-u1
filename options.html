@@ -513,12 +513,14 @@
   </div>
 
   <div class="option-row">
-    <label for="downloadMethod">Converted file download method (Chromium only)</label>
-    <select id="downloadMethod" aria-describedby="downloadMethodHint">
-      <option value="chrome-api">Standard (default)</option>
-      <option value="chrome-api-force">Force filename (Chrome API)</option>
-      <option value="native-html">Native HTML download</option>
-    </select>
+    <label>
+      <span style="min-width:160px">Converted file download method (Chromium only)</span>
+      <select id="downloadMethod" aria-describedby="downloadMethodHint">
+        <option value="chrome-api">Standard (default)</option>
+        <option value="chrome-api-force">Force filename (Chrome API)</option>
+        <option value="native-html">Native HTML download</option>
+      </select>
+    </label>
     <p class="hint" id="downloadMethodHint"></p>
   </div>
   

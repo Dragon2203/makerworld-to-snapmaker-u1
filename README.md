@@ -4,6 +4,14 @@
 
 Convert MakerWorld and Bambu Studio 3MF projects into native Snapmaker U1 projects — directly from MakerWorld or from local files.
 
+**Snapmaker Innovation Fund Winner**
+
+MakerWorld to Snapmaker U1 has been selected as one of the winners of the **Snapmaker Innovation Fund**!
+
+A huge thank you to everyone who has supported this project, shared feedback, reported issues and helped improve the extension.
+
+This recognition shows what community-driven development can achieve. Your support has helped turn this project into a practical tool for Snapmaker U1 users, and I'm excited to keep improving it!
+
 MakerWorld to Snapmaker U1 is a browser extension for Chrome, Chromium-based browsers and Firefox. It offers two ways to convert projects:
 
 - **Direct MakerWorld conversion:** Convert print profiles directly on MakerWorld with a single click on a dedicated **"Convert to Snapmaker U1"** button.
@@ -250,39 +258,62 @@ Native reports use `status: initiated` and `success: null`: a click has no brows
 
 ## Installation
 
-Browser-specific packages are generated in the `dist` directory.
+### Google Chrome (Recommended)
 
-### Chrome and Chromium-based browsers
+Install directly from the official Chrome Web Store:
+
+[MakerWorld to Snapmaker U1 on Chrome Web Store](https://chromewebstore.google.com/detail/makerworld-to-snapmaker-u/nonnifmbllbihdjdcbcjdlffnggheien)
+
+1. Click **Add to Chrome**.
+2. Confirm the requested permissions.
+3. Open MakerWorld and start converting projects.
+
+Future updates are installed automatically through the Chrome Web Store.
+
+No Developer Mode or manual installation is required.
+
+### Microsoft Edge, Brave and other Chromium-based browsers
+
+The extension can also be installed from the Chrome Web Store in compatible Chromium-based browsers.
+
+1. Open the [Chrome Web Store listing](https://chromewebstore.google.com/detail/makerworld-to-snapmaker-u/nonnifmbllbihdjdcbcjdlffnggheien).
+2. Allow extensions from other stores if your browser requires it.
+3. Click **Add to Chrome** or the corresponding installation button.
+4. Confirm the requested permissions.
+
+Alternatively, use the manual installation method described below.
+
+### Manual Installation (Development / Testing)
+
+For developers, testers or users who prefer manual installation, browser-specific packages are available in the latest GitHub release.
 
 1. Download `makerworld-to-snapmaker-u1-chrome-vX.X.X.zip` from the latest GitHub release.
-
 2. Extract the ZIP archive.
-
 3. Open your browser's extension management page:
 
-   * Chrome: `chrome://extensions`
-   * Edge: `edge://extensions`
-   * Brave: `brave://extensions`
+   - Chrome: `chrome://extensions`
+   - Edge: `edge://extensions`
+   - Brave: `brave://extensions`
 
 4. Enable **Developer Mode**.
-
 5. Click **Load unpacked**.
-
 6. Select the extracted extension folder.
 
-The extension can also be loaded directly from the repository source folder in Chrome or another Chromium-based browser.
+The extension can also be loaded directly from the repository source folder.
 
-### Updating (Chrome / Chromium)
+### Updating a Manually Installed Extension
 
 When a new version is released:
 
 1. Download the latest Chrome package from the GitHub Releases page.
 2. Extract the ZIP archive.
 3. Replace the existing extension files in your folder with the new version.
-4. Open your browser's extension management page (`chrome://extensions`, `edge://extensions`, `brave://extensions`, etc.).
-5. Click **Reload** for the MakerWorld to Snapmaker U1 extension. If the browser was closed after replacing the files, reloading the extension is usually not necessary.
+4. Open your browser's extension management page.
+5. Click **Reload** for the MakerWorld to Snapmaker U1 extension.
 
-Your existing converter settings and imported custom printer profiles are stored in the browser and will be preserved during updates.
+Your existing converter settings and imported custom printer profiles are stored in the browser and will be preserved when updating the same extension installation.
+
+**Note:** Extensions installed manually and extensions installed from the Chrome Web Store may use different extension IDs. Browser-stored settings and imported profiles are not automatically transferred between separate installations.
 
 ### Firefox
 
@@ -301,14 +332,14 @@ For development or temporary testing, the Firefox package can still be downloade
 
 ## Browser Support
 
-| Browser                       | Status                                   |
-| ----------------------------- | ---------------------------------------- |
-| Google Chrome                 | ✅ Supported                              |
-| Microsoft Edge                | ✅ Supported through the Chromium package |
-| Brave                         | ✅ Supported through the Chromium package |
-| Other Chromium-based browsers | ✅ Expected to work                       |
-| Mozilla Firefox               | ✅ Supported (Mozilla Add-ons)            |
-| Safari                        | ❌ Not supported                          |
+| Browser                       | Status                                  |
+| ----------------------------- | --------------------------------------- |
+| Google Chrome                 | ✅ Supported (Chrome Web Store)          |
+| Microsoft Edge                | ✅ Supported (Chromium)                  |
+| Brave                         | ✅ Supported (Chromium)                  |
+| Other Chromium-based browsers | ✅ Expected to work                      |
+| Mozilla Firefox               | ✅ Supported (Mozilla Add-ons)           |
+| Safari                        | ❌ Not supported                         |
 
 ---
 
@@ -391,6 +422,7 @@ The generated project opens as a normal Snapmaker Orca or Orca project and is re
 ![Snapmaker Orca](screenshots/project.png)
 
 ![Orca](screenshots/orca.png)
+
 ---
 
 ## Support the Project

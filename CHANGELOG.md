@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 This project follows the principles of **Keep a Changelog** and uses **Semantic Versioning**.
 
-## [Unreleased]
+## [1.9.0] - 2026-10-29
 
 ### Added
 - Add a **Converted file download method** selector with Standard, Force filename (Chrome API), and Native HTML download. Native HTML avoids the filename-listener conflict with Free Download Manager while retaining the existing API implementations and Firefox pipeline.
